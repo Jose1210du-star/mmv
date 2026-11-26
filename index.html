@@ -1642,7 +1642,7 @@ function bkCheck(){const p=$('#bkdue');if(!p)return;const age=bkAge(),due=hasDat
 setInterval(bkCheck,60000);setTimeout(bkCheck,3000);
 
 /* ===================== CLEANUP: tab order, short labels, STATUS diagnostics, help ===================== */
-const VERSION='12.0';
+const VERSION='12.4';
 (function(){const st=document.createElement('style');st.textContent='#status>div{width:min(820px,92%);max-height:90%;overflow:auto}#status td{white-space:normal;word-break:break-word}';document.head.appendChild(st)})();
 (function(){
   const FULL={home:'Home',mon:'Monitor',heat:'Heatmap',mov:'Movers',chart:'Chart',scr:'Screener',news:'News',cfx:'Crypto and FX',port:'Portfolio',inv:'Invest',jr:'Journal',radar:'Radar',cal:'Calendar',alert:'Alerts',biz:'Business',school:'School'};
@@ -5796,13 +5796,14 @@ function openM(){let m=$('#syncm');if(!m){m=document.createElement('div');m.id='
  <p style="margin:8px 0"><small class="mut">Keeps this terminal's data the same on every device you connect. Your data is locked with your passphrase on this device before it leaves, then stored in a private GitHub Gist that only you can open. GitHub never sees anything readable.</small></p>
  <div id="sy-st" style="margin:6px 0"></div>
  ${cfg.token?'':`<ol style="margin:6px 0 10px 18px;padding:0;line-height:1.6"><li>Make a free GitHub account if you do not have one (github.com).</li><li>Open github.com/settings/tokens, choose <b>Generate new token (classic)</b>, name it MMV, tick only <b>gist</b>, set no expiration, create it, and copy it.</li><li>Paste it below, make up a sync passphrase (write it down, it cannot be recovered), and press CONNECT.</li><li>On your other device do the same two boxes with the <b>same token and the same passphrase</b>.</li></ol>`}
- <label style="display:block;margin:6px 0">GitHub token<br><input id="sy-t" type="password" value="${esc(cfg.token||'')}" style="width:100%" autocomplete="off" onkeydown="event.stopPropagation()"></label>
- <label style="display:block;margin:6px 0">Sync passphrase<br><input id="sy-p" type="password" value="${esc(cfg.pass||'')}" style="width:100%" autocomplete="off" onkeydown="event.stopPropagation()"></label>
+ <label style="display:block;margin:6px 0">GitHub token<br><input id="sy-t" type="password" value="${esc(cfg.token||'')}" style="width:100%" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" onkeydown="event.stopPropagation()"></label>
+ <label style="display:block;margin:6px 0">Sync passphrase<br><input id="sy-p" type="password" value="${esc(cfg.pass||'')}" style="width:100%" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" onkeydown="event.stopPropagation()">
+ <label style="display:flex;gap:6px;align-items:center;margin:2px 0 6px"><input type="checkbox" onchange="['sy-t','sy-p'].forEach(i=>$('#'+i).type=this.checked?'text':'password')" style="width:auto"> <small class="mut">Show what I typed (check the token and passphrase match your other device exactly, including capital letters)</small></label></label>
  <label style="display:block;margin:6px 0">This device is called<br><input id="sy-d" value="${esc(cfg.dev||(innerWidth<=900?'Phone':'Mac'))}" style="width:100%" onkeydown="event.stopPropagation()"></label>
  <div style="margin-top:8px"><button class="btn pri" id="sy-go">${cfg.token?'SAVE':'CONNECT'}</button> ${cfg.token?'<button class="btn" id="sy-now">SYNC NOW</button> <button class="btn" id="sy-off">DISCONNECT</button>':''}</div>
  <p style="margin:12px 0 0"><small class="mut">What syncs: everything you typed in (portfolio, journal, money, business, life pages, settings, API keys). What stays on each device: theme and layout choices, price caches, and large photos such as receipts. If both devices are edited before they meet, the newer edit wins and the older copy is kept on that device. Edits sync a few seconds after you make them, and each device checks for changes about once a minute.</small></p></div>`;
  m.classList.add('on');drawM();
- $('#sy-go').onclick=()=>{const t=$('#sy-t').value.trim(),p=$('#sy-p').value;if(!t||!p)return toast('Enter the token and a passphrase');if(p.length<6)return toast('Use a passphrase of at least 6 characters');const newTok=t!==cfg.token;cfg.token=t;cfg.pass=p;cfg.dev=$('#sy-d').value.trim()||'device';if(newTok){cfg.id=null;cfg.pushedHash=null}saveCfg();st.state='idle';st.err='';run(true)};
+ $('#sy-go').onclick=()=>{const t=$('#sy-t').value.replace(/\s+/g,''),p=$('#sy-p').value.replace(/^\s+|\s+$/g,'');if(!t||!p)return toast('Enter the token and a passphrase');if(p.length<6)return toast('Use a passphrase of at least 6 characters');const newTok=t!==cfg.token;cfg.token=t;cfg.pass=p;cfg.dev=$('#sy-d').value.trim()||'device';if(newTok){cfg.id=null;cfg.pushedHash=null}saveCfg();st.state='idle';st.err='';run(true)};
  const n=$('#sy-now');if(n)n.onclick=()=>run(true);
  const o=$('#sy-off');if(o)o.onclick=()=>{if(!confirm('Disconnect sync on this device? Your data here stays. Nothing is deleted from GitHub.'))return;['token','pass','id','pushedHash','lastHash','last'].forEach(k=>delete cfg[k]);saveCfg();st.state='off';st.last=0;pill();openM()}}
 window.openSync=openM;
@@ -5810,7 +5811,7 @@ window.openSync=openM;
 const pl=document.createElement('span');pl.id='syncpill';pl.className='pill sim';pl.style.cursor='pointer';pl.onclick=openM;const anchor=$('#savedpill');if(anchor)anchor.before(pl);else $('#bar').appendChild(pl);
 const _c=window.cmd;window.cmd=function(t){const a=String(t).trim().toUpperCase();if(a==='SYNC')return openM();return _c.apply(this,arguments)};
 const sh=$('#msheet .g:last-child');if(sh){const b=document.createElement('button');b.dataset.a='sync';b.textContent='SYNC';sh.appendChild(b);sh.addEventListener('click',e=>{if(e.target===b){$('#msheet').classList.remove('on');openM()}},true)}
-const sx=document.createElement('style');sx.textContent='@media(max-width:900px){#bar #syncpill{display:inline-block!important;font-size:10px;padding:2px 7px}}';document.head.appendChild(sx);
+const sx=document.createElement('style');sx.textContent='#syncm{z-index:60!important}#bar #syncpill.pill{display:inline-block!important;cursor:pointer}@media(max-width:900px){#bar #syncpill{display:inline-block!important;font-size:10px;padding:2px 7px}}';document.head.appendChild(sx);
 pill();
 if(!cfg.lastHash){try{cfg.lastHash=hash(payload());saveCfg()}catch(e){}}
 setInterval(()=>{if(!document.hidden)run()},60000);
@@ -5865,6 +5866,39 @@ const L=window._life;if(L&&L.draw&&L.draw.car){
  L.draw.car=function(){_d.apply(this,arguments);const el=$('#carbox');if(!el)return;const old=el.querySelector('#cgnw');if(old)old.remove();const G=(S.cg&&S.cg.gear)||[];if(!G.length)return;const A=(S.fin&&S.fin.assets)||[];
   const rows=G.map(g=>{const on=A.some(a=>a.cgid===g.id);return `<tr><td style="text-align:left">${esc(g.name)}</td><td>${on?'<span class="up">counted</span>':'<small class="mut">not counted</small>'}</td><td>${on?`<button class="btn" onclick="cgUncount('${g.id}')">STOP COUNTING</button>`:`<button class="btn pri" onclick="cgCount('${g.id}')">COUNT IN NET WORTH</button>`}</td></tr>`}).join('');
   el.insertAdjacentHTML('beforeend',`<div class="box" id="cgnw" style="margin-top:6px"><h4>GEAR IN YOUR NET WORTH <small>so it is entered once, here, and counted in MONEY</small></h4><div class="in"><table><tr><th style="text-align:left">ITEM</th><th>STATUS</th><th></th></tr>${rows}</table><small class="mut">Edit the value or wear here in CAMERA GEAR. Counting an item adds it to your assets (MONEY) once, so it is not double counted.</small></div></div>`)}}
+})();
+
+
+/* ===================== v12.3: phone start page, error banner, version line ===================== */
+(function(){
+if(window._ph65)return;window._ph65=1;
+const st=document.createElement('style');st.textContent=`#errbar{display:none;position:fixed;left:8px;right:8px;top:calc(8px + env(safe-area-inset-top));z-index:90;background:#7f1d1d;color:#fff;border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.4;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#errbar.on{display:block}#msheet .ver{margin:14px 4px 0;font-size:11px;color:var(--dim);line-height:1.5;word-break:break-word}`;document.head.appendChild(st);
+const eb=document.createElement('div');eb.id='errbar';document.body.appendChild(eb);
+let shown=0;
+function boom(m){if(shown>=3)return;shown++;eb.classList.add('on');eb.innerHTML='<b>Something on this page failed.</b> Screenshot this and send it to Claude:<br><small>'+String(m).replace(/</g,'&lt;').slice(0,260)+'</small><br><u>tap to dismiss</u>'}
+eb.onclick=()=>eb.classList.remove('on');
+addEventListener('error',e=>{if(e.message&&!/ResizeObserver|Script error/i.test(e.message))boom(e.message+(e.lineno?' (line '+e.lineno+')':''))});
+addEventListener('unhandledrejection',e=>{const m=(e.reason&&e.reason.message)||String(e.reason||'');if(m&&!/Failed to fetch|NetworkError|Load failed|AbortError/i.test(m))boom(m)});
+/* version line in the More sheet */
+const sh=document.querySelector('#msheet .sh');
+if(sh){const v=document.createElement('div');v.className='ver';sh.appendChild(v);
+ const upd=()=>{const c=(window._sync&&_sync.cfg)||{};const ua=navigator.userAgent,os=(ua.match(/OS (\d+[_\d]*) like Mac/)||ua.match(/Android [\d.]+/)||ua.match(/Mac OS X [\d_]+/)||['',''])[0];
+  v.innerHTML='MMV Terminal v'+VERSION+(os?' &middot; '+os.replace(/_/g,'.'):'')+'<br>Sync: '+(c.token?('connected'+(c.last?', last '+new Date(c.last).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'')):'off')+(window._sync&&_sync.st&&_sync.st.state==='err'?' (error)':'')};
+ upd();const mn=document.getElementById('mnav');if(mn)mn.addEventListener('click',()=>setTimeout(upd,50),true)}
+/* phone opens on HOME, not on the monitor list */
+if(innerWidth<=900){setTimeout(()=>{try{if(view==='mon'&&!window._phStart){window._phStart=1;show('home')}}catch(e){}},500)}
+})();
+
+
+/* ===================== v12.4: touch hardening for phone nav ===================== */
+(function(){
+if(window._ph66)return;window._ph66=1;
+const st=document.createElement('style');st.textContent='#mnav,#mnav button,#msheet button,#msheet .g *{touch-action:manipulation;-webkit-tap-highlight-color:rgba(255,255,255,.15);cursor:pointer;-webkit-user-select:none;user-select:none}#mnav{-webkit-transform:translateZ(0);transform:translateZ(0)}';document.head.appendChild(st);
+function harden(el){if(!el||el._h66)return;el._h66=1;
+ el.addEventListener('touchend',function(e){const b=e.target&&e.target.closest?e.target.closest('button'):null;if(!b||!el.contains(b))return;e.preventDefault();window._lt66=Date.now();b.click()},{passive:false,capture:true});
+ el.addEventListener('click',function(e){if(e.isTrusted&&Date.now()-(window._lt66||0)<700){e.stopImmediatePropagation();e.preventDefault()}},true)}
+harden(document.getElementById('mnav'));harden(document.getElementById('msheet'));
 })();
 
 </script>
