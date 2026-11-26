@@ -1642,7 +1642,7 @@ function bkCheck(){const p=$('#bkdue');if(!p)return;const age=bkAge(),due=hasDat
 setInterval(bkCheck,60000);setTimeout(bkCheck,3000);
 
 /* ===================== CLEANUP: tab order, short labels, STATUS diagnostics, help ===================== */
-const VERSION='13.0';
+const VERSION='13.1';
 (function(){const st=document.createElement('style');st.textContent='#status>div{width:min(820px,92%);max-height:90%;overflow:auto}#status td{white-space:normal;word-break:break-word}';document.head.appendChild(st)})();
 (function(){
   const FULL={home:'Home',mon:'Monitor',heat:'Heatmap',mov:'Movers',chart:'Chart',scr:'Screener',news:'News',cfx:'Crypto and FX',port:'Portfolio',inv:'Invest',jr:'Journal',radar:'Radar',cal:'Calendar',alert:'Alerts',biz:'Business',school:'School'};
@@ -6142,6 +6142,61 @@ if(window._v13c)return;window._v13c=1;
 if(typeof aHit==='function'){const _ah=aHit;aHit=function(a){try{const r=R[a.sym];if(!r||!r.live)return false}catch(e){return false}return _ah.apply(this,arguments)}}
 /* 2. portfolio totals used by net worth and HOME: a holding with no real price counts at what you paid, never a simulated value */
 if(typeof portTotals==='function'){portTotals=function(){let val=0,cost=0,day=0,sim=false;S.port.forEach(p=>{const r=ensure(p.sym),c=p.cost*p.qty;cost+=c;if(r&&r.live){val+=r.last*p.qty;day+=(r.last-r.prev)*p.qty}else{val+=c;sim=true}});return{val,cost,day,sim}}}
+})();
+
+
+/* ===================== v13.1: phone gets the same sidebar (slide-in) and breadcrumb ===================== */
+(function(){
+if(window._v13d)return;window._v13d=1;
+const side=document.getElementById('side'),bar=document.getElementById('bar'),sbar=document.getElementById('sbar');if(!side||!bar)return;
+const st=document.createElement('style');st.textContent=`
+#mmenu,#mback{display:none}
+@media(max-width:900px){
+ #mmenu{display:inline-flex;align-items:center;justify-content:center;flex:none;width:34px;height:34px;margin-right:6px;background:var(--bg2);border:1px solid var(--line);border-radius:9px;color:var(--fg);cursor:pointer;padding:0}
+ #bar .logo{display:none!important}
+ #wscrumb{display:inline-block!important;flex:none;max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px -apple-system,"Segoe UI",Arial,sans-serif;color:var(--dim);margin-right:8px}
+ #wscrumb b{color:var(--fg);font-weight:600}
+ #wscrumb .cr{display:none}
+ #side{display:flex!important;position:fixed;left:0;top:0;bottom:0;width:min(84vw,320px);z-index:60;flex-direction:column;background:var(--side);border-right:1px solid var(--line);transform:translateX(-102%);transition:transform .2s;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);font-family:-apple-system,"Segoe UI","Helvetica Neue",Arial,sans-serif;box-shadow:none}
+ body.drawer #side{transform:none;box-shadow:0 0 40px rgba(0,0,0,.6)}
+ #mback{display:block;position:fixed;inset:0;z-index:55;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .2s}
+ body.drawer #mback{opacity:1;pointer-events:auto}
+ #side .sh{height:52px;flex:none;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--line)}
+ #side .sh .lg{background:var(--ac);color:var(--ink);font-weight:800;font-size:12px;letter-spacing:.06em;border-radius:7px;padding:4px 8px}
+ #side .sh .wn{font-size:11px;color:var(--mut);letter-spacing:.08em}
+ #side .sl{flex:1;overflow-y:auto;padding:6px 10px;-webkit-overflow-scrolling:touch}
+ #side .gt{display:flex;align-items:center;gap:6px;width:100%;background:none;border:0;color:var(--mut);font-size:10px;font-weight:600;letter-spacing:.1em;padding:12px 8px 4px;text-align:left}
+ #side .gt svg{transition:transform .12s;flex:none}
+ #side .grp.c .gt svg{transform:rotate(-90deg)}#side .grp.c .its{display:none}
+ #side .si{position:relative;display:flex;align-items:center;gap:12px;width:100%;background:none;border:0;border-radius:10px;color:var(--dim);font-size:15px;padding:11px 10px;text-align:left;font-family:inherit}
+ #side .si.on{background:var(--hov);color:var(--fg)}
+ #side .si.on .ni{color:var(--ac)}
+ #side .si.on::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--ac)}
+ #side .si .lb{flex:1}
+ #side .si .fv{flex:none;color:var(--mut);padding:0 4px;opacity:.5}#side .si .fv.on{opacity:1;color:var(--ac)}
+ #side .sf{flex:none;border-top:1px solid var(--line);padding:8px 14px;font-size:11px;color:var(--mut);line-height:1.5}
+ #side .sf [data-collapse]{display:none}
+ #side{touch-action:pan-y}
+}
+`;document.head.appendChild(st);
+const btn=document.createElement('button');btn.id='mmenu';btn.setAttribute('aria-label','Open menu');btn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
+bar.insertBefore(btn,bar.firstChild);
+const back=document.createElement('div');back.id='mback';document.body.appendChild(back);
+const open=()=>{if(innerWidth>900)return;document.body.classList.add('drawer');const sl=side.querySelector('.sl');if(sl)sl.scrollTop=0},shut=()=>document.body.classList.remove('drawer');
+btn.addEventListener('click',e=>{e.stopPropagation();document.body.classList.contains('drawer')?shut():open()});
+back.addEventListener('click',shut);
+/* choosing something closes the menu */
+side.addEventListener('click',e=>{if(innerWidth>900)return;if(e.target.closest('[data-gt],[data-fav]'))return;if(e.target.closest('.si[data-id]'))setTimeout(shut,30)},true);
+/* swipe left on the menu closes it; swipe right from the left edge opens it */
+let x0=null,y0=null;document.addEventListener('touchstart',e=>{const t=e.touches[0];x0=t.clientX;y0=t.clientY},{passive:true});
+document.addEventListener('touchend',e=>{if(x0==null||innerWidth>900)return;const t=e.changedTouches[0],dx=t.clientX-x0,dy=Math.abs(t.clientY-y0);if(dy<40){if(document.body.classList.contains('drawer')&&dx<-60)shut();else if(!document.body.classList.contains('drawer')&&x0<18&&dx>70)open()}x0=null},{passive:true});
+/* MORE on the bottom bar opens the same menu instead of a second list */
+const mn=document.getElementById('mnav');if(mn)mn.addEventListener('click',e=>{const b=e.target.closest('button[data-k=more]');if(!b)return;e.stopImmediatePropagation();e.preventDefault();const sh=document.getElementById('msheet');if(sh)sh.classList.remove('on');document.body.classList.contains('drawer')?shut():open()},true);
+if(mn){const t=mn.querySelector('button[data-k=more]');if(t)[...t.childNodes].forEach(n=>{if(n.nodeType===3&&/more/i.test(n.textContent))n.textContent='MENU'})}
+/* status line at the bottom of the menu */
+const sf=side.querySelector('.sf');if(sf){const d=document.createElement('div');d.id='sfst';sf.insertBefore(d,sf.firstChild);const upd=()=>{if(sbar)d.textContent=[...sbar.children].filter(x=>!x.classList.contains('sp2')&&x.tagName!=='A').map(x=>x.textContent.trim()).filter(Boolean).join(' \u00b7 ')};upd();setInterval(upd,4000)}
+addEventListener('resize',()=>{if(innerWidth>900)shut()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')shut()});
 })();
 
 </script>
