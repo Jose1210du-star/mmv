@@ -1642,7 +1642,7 @@ function bkCheck(){const p=$('#bkdue');if(!p)return;const age=bkAge(),due=hasDat
 setInterval(bkCheck,60000);setTimeout(bkCheck,3000);
 
 /* ===================== CLEANUP: tab order, short labels, STATUS diagnostics, help ===================== */
-const VERSION='12.4';
+const VERSION='12.6';
 (function(){const st=document.createElement('style');st.textContent='#status>div{width:min(820px,92%);max-height:90%;overflow:auto}#status td{white-space:normal;word-break:break-word}';document.head.appendChild(st)})();
 (function(){
   const FULL={home:'Home',mon:'Monitor',heat:'Heatmap',mov:'Movers',chart:'Chart',scr:'Screener',news:'News',cfx:'Crypto and FX',port:'Portfolio',inv:'Invest',jr:'Journal',radar:'Radar',cal:'Calendar',alert:'Alerts',biz:'Business',school:'School'};
@@ -5767,7 +5767,7 @@ async function findGist(){if(cfg.id)return cfg.id;for(let p=1;p<=3;p++){const a=
 async function readRemote(id){const g=await gh('/gists/'+id);const f=g.files&&g.files[FILE];if(!f)return null;let txt=f.content;if(f.truncated&&f.raw_url){txt=await(await fetch(f.raw_url)).text()}if(!txt||txt.length<10)return null;return txt}
 const st={state:cfg.token?'idle':'off',msg:'',busy:0,last:cfg.last||0,err:''};
 function pill(){const p=$('#syncpill');if(!p)return;p.style.display='';const t=st.state==='off'?'SYNC OFF':st.state==='err'?'SYNC ERROR':st.busy?'SYNCING...':'SYNCED '+new Date(st.last).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});p.textContent=t;p.className='pill '+(st.state==='err'?'stale':st.state==='off'?'sim':'live');p.title=st.err||'Click to open sync settings'}
-function mark(){clearTimeout(mark.t);mark.t=setTimeout(()=>{if(!cfg.token)return;const h=hash(payload());if(h!==cfg.lastHash){cfg.lastHash=h;S._ts=Date.now();LS.set('mmv3',S);saveCfg();clearTimeout(run.t);run.t=setTimeout(run,5000)}},4000)}
+function mark(){clearTimeout(mark.t);mark.t=setTimeout(()=>{if(!cfg.token)return;const h=hash(payload());if(h!==cfg.lastHash){try{const pl=payload(),kh={};Object.keys(pl).forEach(k=>{kh[k]=hash(JSON.stringify(pl[k]))});const pv=cfg.keyH||{},ch=Object.keys(kh).filter(k=>kh[k]!==pv[k]).concat(Object.keys(pv).filter(k=>!(k in kh)));cfg.keyH=kh;if(ch.length){cfg.chg=(cfg.chg||[]).concat([new Date().toLocaleTimeString()+' '+ch.slice(0,6).join(',')]).slice(-6)}}catch(e){}cfg.lastHash=h;S._ts=Date.now();LS.set('mmv3',S);saveCfg();clearTimeout(run.t);run.t=setTimeout(run,5000)}},4000)}
 const _sb=schedBk;schedBk=function(){try{mark()}catch(e){}return _sb.apply(this,arguments)};
 function typing(){const a=document.activeElement;return a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.id!=='cmd'}
 async function run(manual){if(!cfg.token||!cfg.pass||st.busy)return;st.busy=1;pill();
@@ -5778,6 +5778,10 @@ async function run(manual){if(!cfg.token||!cfg.pass||st.busy)return;st.busy=1;pi
   else{const hd=JSON.parse(txt),rts=hd.ts||0,lts=S._ts||0;
    if(rts>lts){
     if(typing()&&!manual){st.busy=0;st.state='ok';pill();clearTimeout(run.t);run.t=setTimeout(run,15000);return}
+    if(!manual){let rl=[];try{rl=JSON.parse(localStorage.getItem('mmv3_rl')||'[]').filter(t=>Date.now()-t<600000)}catch(e){}
+     if(rl.length>=3){st.busy=0;st.state='err';st.err='Sync paused: this device kept refreshing itself ('+rl.length+' times in 10 minutes). Changed lately: '+((cfg.chg||[]).join(' | ')||'unknown')+'. Press SYNC NOW to resume, and send this message to Claude.';pill();drawM();return}}
+    else{try{localStorage.removeItem('mmv3_rl')}catch(e){}}
+    try{const rl2=JSON.parse(localStorage.getItem('mmv3_rl')||'[]').filter(t=>Date.now()-t<600000);rl2.push(Date.now());localStorage.setItem('mmv3_rl',JSON.stringify(rl2))}catch(e){}
     const remote=await open(txt,cfg.pass);if(dirty){try{localStorage.setItem('mmv3_lostedit',JSON.stringify({at:Date.now(),data:S}))}catch(e){}}
     const m=bigs(S,'',{});const ns=remote;EX.forEach(k=>{if(k in S)ns[k]=S[k]});reinject(ns,m);ns._ts=rts;
     const hh=hash(payload(ns));cfg.pushedHash=hh;cfg.lastHash=hh;saveCfg();
@@ -5787,7 +5791,7 @@ async function run(manual){if(!cfg.token||!cfg.pass||st.busy)return;st.busy=1;pi
    else{cfg.pushedHash=cfg.pushedHash||h}}
   cfg.last=Date.now();saveCfg();st.last=cfg.last;st.state='ok';st.err=''}
  catch(e){st.state='err';st.err=e.message==='BADTOKEN'?'GitHub rejected the token. Make a new one with the gist box ticked.':e.message==='WRONGPASS'?'Wrong sync passphrase. It must match the other device.':e.message==='LIMIT'?'GitHub is rate limiting. It will retry.':'Could not reach GitHub ('+e.message+'). Will retry.'}
- st.busy=0;pill();drawM()}
+ st.busy=0;pill();drawM();if(st.state==='err'&&cfg.token){clearTimeout(run.er);run.er=setTimeout(()=>run(),30000)}}
 /* ---------- settings window ---------- */
 function drawM(){const m=$('#syncm');if(!m||!m.classList.contains('on'))return;const b=m.querySelector('#sy-st');if(b)b.innerHTML=(st.state==='err'?'<span class="dn">'+esc(st.err)+'</span>':cfg.token?(st.last?'<span class="up">Connected.</span> Last sync '+new Date(st.last).toLocaleString():'Connected. Syncing...'):'Not connected yet.')+(st.msg?' <small class="mut">'+esc(st.msg)+'</small>':'')}
 function openM(){let m=$('#syncm');if(!m){m=document.createElement('div');m.id='syncm';m.className='modal';document.body.appendChild(m);m.onclick=e=>{if(e.target===m)m.classList.remove('on')}}
@@ -5800,11 +5804,18 @@ function openM(){let m=$('#syncm');if(!m){m=document.createElement('div');m.id='
  <label style="display:block;margin:6px 0">Sync passphrase<br><input id="sy-p" type="password" value="${esc(cfg.pass||'')}" style="width:100%" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" onkeydown="event.stopPropagation()">
  <label style="display:flex;gap:6px;align-items:center;margin:2px 0 6px"><input type="checkbox" onchange="['sy-t','sy-p'].forEach(i=>$('#'+i).type=this.checked?'text':'password')" style="width:auto"> <small class="mut">Show what I typed (check the token and passphrase match your other device exactly, including capital letters)</small></label></label>
  <label style="display:block;margin:6px 0">This device is called<br><input id="sy-d" value="${esc(cfg.dev||(innerWidth<=900?'Phone':'Mac'))}" style="width:100%" onkeydown="event.stopPropagation()"></label>
- <div style="margin-top:8px"><button class="btn pri" id="sy-go">${cfg.token?'SAVE':'CONNECT'}</button> ${cfg.token?'<button class="btn" id="sy-now">SYNC NOW</button> <button class="btn" id="sy-off">DISCONNECT</button>':''}</div>
+ <div style="margin-top:8px"><button class="btn pri" id="sy-go">${cfg.token?'SAVE':'CONNECT'}</button> ${cfg.token?'<button class="btn" id="sy-now">SYNC NOW</button> <button class="btn" id="sy-off">DISCONNECT</button>':''} <button class="btn" id="sy-test">TEST CONNECTION</button></div><div id="sy-diag" style="margin-top:8px;font-size:12px;line-height:1.6;white-space:pre-wrap"></div>
  <p style="margin:12px 0 0"><small class="mut">What syncs: everything you typed in (portfolio, journal, money, business, life pages, settings, API keys). What stays on each device: theme and layout choices, price caches, and large photos such as receipts. If both devices are edited before they meet, the newer edit wins and the older copy is kept on that device. Edits sync a few seconds after you make them, and each device checks for changes about once a minute.</small></p></div>`;
  m.classList.add('on');drawM();
  $('#sy-go').onclick=()=>{const t=$('#sy-t').value.replace(/\s+/g,''),p=$('#sy-p').value.replace(/^\s+|\s+$/g,'');if(!t||!p)return toast('Enter the token and a passphrase');if(p.length<6)return toast('Use a passphrase of at least 6 characters');const newTok=t!==cfg.token;cfg.token=t;cfg.pass=p;cfg.dev=$('#sy-d').value.trim()||'device';if(newTok){cfg.id=null;cfg.pushedHash=null}saveCfg();st.state='idle';st.err='';run(true)};
  const n=$('#sy-now');if(n)n.onclick=()=>run(true);
+ $('#sy-test').onclick=async()=>{const d=$('#sy-diag'),L=[];const out=()=>{d.textContent=L.join('\n')};L.push('Online: '+(navigator.onLine?'yes':'NO - this device has no internet'));out();
+  const tok=($('#sy-t').value||'').replace(/\s+/g,'')||cfg.token;
+  try{const r=await fetch('https://api.github.com/zen',{cache:'no-store'});L.push('Reach GitHub: '+(r.ok?'yes':'HTTP '+r.status));}catch(e){L.push('Reach GitHub: NO ('+e.message+'). Something on this device or network blocks api.github.com (VPN, ad blocker, Private Relay, content filter, Lockdown mode, or no signal).');out();return}
+  out();if(!tok){L.push('Token: none entered');out();return}
+  try{const r=await fetch('https://api.github.com/gists?per_page=1',{headers:{Authorization:'Bearer '+tok,Accept:'application/vnd.github+json'},cache:'no-store'});L.push('Token: '+(r.ok?'works with gists':r.status===401?'REJECTED (expired, mistyped, or revoked)':r.status===403?'blocked or rate limited (HTTP 403)':'HTTP '+r.status));
+   if(r.ok){const g=await findGist().catch(()=>null);L.push('Sync file: '+(g?'found':'not created yet')+'. If everything above says yes, press SYNC NOW.')}}catch(e){L.push('Token check failed ('+e.message+')')}
+  out()};
  const o=$('#sy-off');if(o)o.onclick=()=>{if(!confirm('Disconnect sync on this device? Your data here stays. Nothing is deleted from GitHub.'))return;['token','pass','id','pushedHash','lastHash','last'].forEach(k=>delete cfg[k]);saveCfg();st.state='off';st.last=0;pill();openM()}}
 window.openSync=openM;
 /* header pill + cmd + sheet hook */
