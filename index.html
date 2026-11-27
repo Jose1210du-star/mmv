@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <title>MMV Terminal</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-m80wN3aM/Z7gdewTpcTTYUkP7UbzXgTEpjyX2UsK6FM='; script-src-attr 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'self' https://finnhub.io https://api.twelvedata.com https://api.github.com https://ntfy.sh https://open.er-api.com https://api.frankfurter.dev https://api.frankfurter.app https://api.coingecko.com https://cdn.jsdelivr.net https://unpkg.com http://127.0.0.1:* wss://ws.finnhub.io; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'">
+<meta name="referrer" content="no-referrer">
 <style>
 :root{--bg:#000;--bg2:#070707;--fg:#fff;--ac:#ffa500;--dim:#8a8a8a;--line:#262626;--up:#00ff4c;--dn:#ff2a2a;--bup:#006b25;--bdn:#8a0f0f;--lnk:#4aa3ff;--ink:#000}
 body[data-theme=green]{--ac:#37ff6b;--fg:#b9ffcc;--dim:#3f8f57;--lnk:#37ff6b;--line:#123}
@@ -150,9 +152,9 @@ input,textarea,select{background:var(--bg);border:1px solid var(--line);color:va
 <div class="modal" id="setup"><div>
   <h3>SETUP</h3>
   <small>Both keys are free and optional. Without them the screen runs on simulated prices.</small><br><br>
-  Finnhub key (live quotes, profile, peers, news, earnings): <a href="https://finnhub.io/register" target="_blank">finnhub.io/register</a>
+  Finnhub key (live quotes, profile, peers, news, earnings): <a href="https://finnhub.io/register" target="_blank" rel="noopener noreferrer">finnhub.io/register</a>
   <input id="kfh" placeholder="Finnhub key">
-  Twelve Data key (real candlestick charts): <a href="https://twelvedata.com/register" target="_blank">twelvedata.com/register</a>
+  Twelve Data key (real candlestick charts): <a href="https://twelvedata.com/register" target="_blank" rel="noopener noreferrer">twelvedata.com/register</a>
   <input id="ktd" placeholder="Twelve Data key">
   Focus list (refreshes fastest, shown first with a star, includes your portfolio and alerts)
   <textarea id="fsyms" rows="2"></textarea>
@@ -176,11 +178,14 @@ input,textarea,select{background:var(--bg);border:1px solid var(--line);color:va
 
 <script>
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
-const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){if(window._noFlush&&k==='mmv3')return;try{localStorage.setItem(k,JSON.stringify(v));if(k==='mmv3'&&LS._q){LS._q=0;try{idbSet('qfail',0)}catch(x){}}}catch(e){/* v13.3: tell the person instead of failing silently */if(k==='mmv3'){LS._q=1;try{idbSet('qfail',Date.now())}catch(x){}}try{if(!LS._w||Date.now()-LS._w>30000){LS._w=Date.now();setTimeout(()=>{try{toast('Could not save. Browser storage is full or blocked, so recent changes may be lost. Download a backup now.')}catch(x){}},0)}}catch(x){}}}};
 const f=(n,d=2)=>n==null||isNaN(n)?'--':(+n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 const big=n=>n==null?'--':n>=1e6?'$'+f(n/1e6,2)+'T':n>=1e3?'$'+f(n/1e3,0)+'B':'$'+f(n,0)+'M'; // input in millions
 const cl=n=>n>0?'up':n<0?'dn':'';
-const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* v13.3: identifier-like fields (ids, symbols, times) are stripped of markup/quote characters on load, restore and sync, so imported or synced data cannot inject script */
+function _cleanIds(o,d){d=d||0;if(!o||typeof o!=='object'||d>9)return o;for(const k of Object.keys(o)){const v=o[k];if(typeof v==='string'){if(/^(id|sym|s|am|pm)$|Id$/.test(k)&&/[<>"'`\\&]/.test(v))o[k]=v.replace(/[<>"'`\\&]/g,'')}else if(v&&typeof v==='object')_cleanIds(v,d+1)}return o}
+function _cleanSyms(a){return Array.isArray(a)?a.map(x=>typeof x==='string'?x.replace(/[<>"'`\\&\s]/g,'').slice(0,24):x):a}
 const li=a=>a.map(x=>`<div>${x}</div>`).join('');
 const lk=(u,t)=>`<a class="btn" href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>`;
 const SECT_RAW="Technology:AAPL MSFT NVDA AVGO ORCL CRM ADBE CSCO ACN IBM TXN QCOM INTU NOW AMD MU ADI LRCX KLAC INTC ANET APH PANW SNPS CDNS PLTR SHOP XYZ MSTR|Communication:GOOGL META NFLX DIS VZ T TMUS PINS SNAP ROKU|Consumer Disc.:AMZN TSLA HD MCD LOW BKNG TJX SBUX NKE CMG MAR ABNB F GM RIVN DKNG UBER CCL NCLH|Consumer Staples:COST PG KO WMT PEP PM MDLZ MO|Financials:BRK.B JPM V MA BAC WFC GS MS SPGI AXP BLK PGR C MRSH SCHW CB CME ICE FISV PYPL COIN HOOD SOFI|Health Care:LLY UNH JNJ ABBV MRK TMO ABT AMGN ISRG DHR PFE ELV SYK BSX MDT VRTX GILD BMY ZTS REGN CI MRNA|Industrials:GE CAT RTX HON UNP LMT ETN BA DE UPS WM ADP AAL DAL|Energy:XOM CVX COP|Utilities / RE:NEE SO DUK PLD AMT EQIX|Materials:LIN SHW";
@@ -256,16 +261,43 @@ const DEF="SPY QQQ DIA IWM VTI EFA EEM TLT GLD SLV USO XLF XLK XLE XLV XLY XLP X
 
 /* ---------- state ---------- */
 const S=(()=>{const D={fh:'',td:'',lists:{Main:DEF},active:'Main',port:[],alerts:[],notes:{},theme:'amber',biz:{}};
-let v=LS.get('mmv3',null);if(!v||typeof v!=='object'||Array.isArray(v))v={};
+let _raw=null;try{_raw=localStorage.getItem('mmv3')}catch(e){}let v=null,_bad=false;if(_raw){try{v=JSON.parse(_raw)}catch(e){_bad=true}}
+let _rep=_bad?1:0;if(!v||typeof v!=='object'||Array.isArray(v)){if(v!=null)_rep++;v={}}
+/* v13.3: damaged saved data is repaired on load, and the untouched original is kept so nothing is lost */
+const _TM={"lists":"o","port":"a","alerts":"a","notes":"o","biz":"o","focus":"a","bd":"o","bd.list":"a","school":"o","jr":"a","scans":"a","fund":"o","calc":"o","inv":"o","scrf":"o","radar":"o","rules":"a","ck":"o","lim":"o","pv":"o","ais":"o","fin":"o","fin.inc":"a","fin.exp":"a","fin.nw":"o","fin.rec":"a","fin.rules":"o","fin.budget":"o","fin.assets":"a","fin.noAsset":"a","fin.noBill":"a","fin.accts":"a","fin.cards":"a","fin.ccpay":"a","fin.bank":"a","fin.taxSaved":"a","nwh":"o","chk":"o","homeHide":"a","bizHide":"a","fold":"o","sold":"a","pfSort":"o","pal":"a","tgt":"o","dpsm":"o","evc":"o","mil":"a","dedI":"a","fc":"o","nwGoal":"o","rch":"o","fxA":"o","rm":"o","ivx":"o","jp":"a","jw":"o","jd":"o","jf":"o","bx":"o","mx":"o","sx":"o","ax":"o","pl":"o","gl":"o","vt":"o","hb":"o","hl":"o","tr":"o","pp":"o","cg":"o","pt":"o"};
+(function dropNulls(o,d){if(!o||typeof o!=='object'||d>8)return;if(Array.isArray(o)){for(let i=o.length-1;i>=0;i--){if(o[i]==null){o.splice(i,1);_rep++}else if(typeof o[i]==='object')dropNulls(o[i],d+1)}}else for(const k of Object.keys(o)){if(o[k]&&typeof o[k]==='object')dropNulls(o[k],d+1)}})(v,0);
+for(const pth in _TM){const ks=pth.split('.');let o=v;for(let i=0;i<ks.length-1&&o&&typeof o==='object';i++)o=o[ks[i]];if(!o||typeof o!=='object')continue;const k=ks[ks.length-1];if(!(k in o))continue;const x=o[k],isA=Array.isArray(x),isO=!!x&&typeof x==='object'&&!isA;if(_TM[pth]==='a'&&!isA){o[k]=[];_rep++}else if(_TM[pth]==='o'&&!isO){o[k]={};_rep++}}
+for(const k of ['port','alerts']){if(Array.isArray(v[k])){const n=v[k].length;v[k]=v[k].filter(x=>x&&typeof x==='object'&&typeof x.sym==='string'&&x.sym);if(v[k].length!==n)_rep++}}if(Array.isArray(v.port))v.port.forEach(x=>{if(typeof x.qty!=='number'||!isFinite(x.qty)){x.qty=parseFloat(x.qty)||0;_rep++}if(typeof x.cost!=='number'||!isFinite(x.cost)){x.cost=parseFloat(x.cost)||0;_rep++}})
+if(_rep&&_raw){try{localStorage.setItem('mmv3_corrupt',_raw);localStorage.setItem('mmv3_corrupt_at',String(Date.now()))}catch(e){}window._repairNote=_rep}
 for(const k in D){const d=D[k],x=v[k];const okT=Array.isArray(d)?Array.isArray(x):(d&&typeof d==='object')?(x&&typeof x==='object'&&!Array.isArray(x)):typeof x===typeof d;if(!okT)v[k]=d}
 if(!Object.keys(v.lists).length)v.lists={Main:DEF};
 for(const k in v.lists)if(!Array.isArray(v.lists[k]))v.lists[k]=[];
 if(!v.lists[v.active])v.active=Object.keys(v.lists)[0];
-return v})();
+_cleanIds(v);for(const k in v.lists)v.lists[k]=_cleanSyms(v.lists[k]);if(Array.isArray(v.focus))v.focus=_cleanSyms(v.focus);return v})();
+if(window._repairNote)setTimeout(()=>{try{toast('Some saved data was damaged and has been repaired. A copy of the original was kept on this device (Setup, Backup).')}catch(e){}},2500);
+/* ===== v13.4 credential vault core: secrets stay out of everything that gets stored, copied or exported ===== */
+window._cred=(function(){
+ const st={has:false,locked:false,key:null,salt:null,n:600000,last:'',idle:15,mem:{fh:'',td:'',aiskey:'',topic:'',token:'',pass:''},legacy:{},act:Date.now(),fails:0,wait:0};
+ try{st.has=!!localStorage.getItem('mmv3_cred')}catch(e){}
+ try{const c=JSON.parse(localStorage.getItem('mmv3_credcfg')||'{}');if(typeof c.idle==='number')st.idle=c.idle}catch(e){}
+ try{if(!st.has&&localStorage.getItem('mmv3_cred_new'))localStorage.removeItem('mmv3_cred_new')}catch(e){}   /* an interrupted setup left a half-written copy: discard it, the original keys are untouched */
+ const TOP=['fh','td','aiskey'];
+ function hideTop(k,init){Object.defineProperty(S,k,{get(){return st.mem[k]},set(v){st.mem[k]=v==null?'':String(v)},enumerable:false,configurable:true});st.mem[k]=init||''}
+ function hideRadar(init){const r=S.radar;if(!r||typeof r!=='object')return;const d=Object.getOwnPropertyDescriptor(r,'topic');if(d&&d.get)return;Object.defineProperty(r,'topic',{get(){return st.mem.topic},set(v){st.mem.topic=v==null?'':String(v)},enumerable:false,configurable:true});st.mem.topic=init||''}
+ if(st.has){st.locked=true;TOP.forEach(k=>{const cur=S[k];if(cur)st.legacy[k]=cur;hideTop(k,'')})}
+ return{_st:st,TOP,hideTop,hideRadar,
+  initCfg(cfg){if(st.has){if(cfg.token)st.legacy.token=cfg.token;if(cfg.pass)st.legacy.pass=cfg.pass;delete cfg.token;delete cfg.pass}},
+  cfgOut(cfg){if(!st.has)return cfg;const o=Object.assign({},cfg);delete o.token;delete o.pass;try{setTimeout(()=>window._cred.persist&&window._cred.persist(),0)}catch(e){}return o},
+  json(o){return JSON.stringify(o,function(k,v){if(this===S&&(k==='fh'||k==='td'||k==='aiskey'))return undefined;if(S.radar&&this===S.radar&&k==='topic')return undefined;return v})},
+  stdState(){return JSON.parse(this.json(S))},
+  status(){if(st.has)return st.locked?'locked':'unlocked';let any=!!(S.fh||S.td||S.aiskey);try{const c=window._sync&&window._sync.cfg;if(c&&(c.token||c.pass))any=true;if(S.radar&&S.radar.push&&S.radar.topic)any=true}catch(e){}return any?'legacy':'none'}};
+})();
 const PROF=LS.get('mmv3_prof',{});           // sym -> {cap,name,ind}
 S.focus=S.focus||[];
 S.bd=S.bd||{};
 if(!S.bd.list){const o=S.bd;S.bd={tab:o.tab==='ranch'?'ranch':'mmv',list:[{id:'mmv',name:'My Business',tmpl:'service',data:o.mmv||{jobs:[],exp:[],notes:''}},{id:'ranch',name:'Rancho / Cattle',tmpl:'ranch',data:o.ranch||{cur:'USD',tx:[],wts:[],notes:''}}]}}
+/* v13.3: a damaged business record (unknown template, missing lists) is repaired on load instead of crashing HOME and BUSINESS */
+(function(){const A={service:['jobs','exp'],ranch:['tx','wts'],ledger:['inc','exp']};if(!Array.isArray(S.bd.list))S.bd.list=[];S.bd.list=S.bd.list.filter(b=>b&&typeof b==='object');S.bd.list.forEach((b,i)=>{if(!A[b.tmpl])b.tmpl='service';if(!b.data||typeof b.data!=='object'||Array.isArray(b.data))b.data={};A[b.tmpl].forEach(k=>{if(!Array.isArray(b.data[k]))b.data[k]=[]});if(b.tmpl==='ranch'&&!b.data.cur)b.data.cur='USD';if(typeof b.name!=='string'||!b.name)b.name='Business '+(i+1);if(typeof b.id!=='string'||!b.id)b.id='b'+i+Date.now().toString(36)})})();
 const RENAMES={SQ:'XYZ',FI:'FISV',MMC:'MRSH'};
 (function(){let ch=0;const fx=a=>a.map(x=>RENAMES[x]?(ch=1,RENAMES[x]):x);
   Object.keys(S.lists).forEach(k=>S.lists[k]=[...new Set(fx(S.lists[k]))]);S.focus=[...new Set(fx(S.focus))];
@@ -276,6 +308,7 @@ const save=()=>{LS.set('mmv3',S);if(typeof schedBk==='function')schedBk()};
 document.body.dataset.theme=S.theme;
 const MACRO=[['SPY','S&P 500 (SPY)'],['QQQ','NASDAQ (QQQ)'],['DIA','DOW (DIA)'],['IWM','R2000 (IWM)'],['TLT','20Y BOND (TLT)'],['GLD','GOLD (GLD)'],['USO','OIL (USO)'],['UUP','USD (UUP)']];
 const R={};      // sym -> {last,prev,hi,lo,vol,live,hist[],el}
+window.R=R;   // v13.3: later code reads window.R; a top-level const is not a window property, so without this every quote lookup there silently failed
 let order=[],view='mon',lastOk=0,okCount=0;
 function ensure(s){if(!R[s]){const b=100+(s.charCodeAt(0)*7+s.length*13)%400;const h=[];let v=b*(1+(Math.random()-.5)*.03);for(let i=0;i<160;i++){v*=1+(Math.random()-.5)*.004;h.push(v)}const k=b/h[h.length-1];for(let i=0;i<h.length;i++)h[i]*=k;R[s]={last:b,prev:b*(1+(Math.random()-.5)*.02),live:false,hist:h,el:null}}return R[s]}
 function symbols(){
@@ -293,12 +326,13 @@ function fh(path,prio){
     prio?Qn.unshift(job):Qn.push(job);
   });
 }
+const okPx=v=>typeof v==='number'&&isFinite(v)&&v>0&&v<1e7;
 function quoteJob(){
   const all=symbols();if(!all.length)return null;
   const foc=[...new Set([...S.focus,...S.port.map(p=>p.sym),...S.alerts.filter(a=>!a.fired).map(a=>a.sym)])];
   const s=(foc.length&&tick%3!==0)?foc[fi++%foc.length]:all[qi++%all.length];
   return ()=>fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(s)}&token=${S.fh}`).then(r=>r.json()).then(j=>{
-    if(j&&j.c){const r=ensure(s),o=r.last;r.last=j.c;r.prev=j.pc||j.c;r.hi=j.h;r.lo=j.l;r.op=j.o;r.live=true;r.qt=Date.now();r.hist.push(j.c);if(r.hist.length>400)r.hist.shift();lastOk=Date.now();okCount++;paintAll(s,j.c>o?1:j.c<o?-1:0)}
+    if(j&&okPx(j.c)){const r=ensure(s),o=r.last;r.last=j.c;r.prev=okPx(j.pc)?j.pc:j.c;r.hi=j.h;r.lo=j.l;r.op=j.o;r.live=true;r.qt=Date.now();r.hist.push(j.c);if(r.hist.length>400)r.hist.shift();lastOk=Date.now();okCount++;paintAll(s,j.c>o?1:j.c<o?-1:0)}
   }).catch(()=>{});
 }
 function profJob(){
@@ -780,7 +814,7 @@ $('#wdel').onclick=()=>{if(Object.keys(S.lists).length<2)return;delete S.lists[S
 const parseSyms=t=>[...new Set(t.split(/[,\s]+/).map(x=>x.trim().toUpperCase()).filter(Boolean))];
 $('#ssave').onclick=()=>{S.focus=parseSyms($('#fsyms').value);S.fh=$('#kfh').value.trim();S.td=$('#ktd').value.trim();S.lists[S.active]=parseSyms($('#wsyms').value);save();$('#setup').classList.remove('on');setMode();show(view)};
 $('#bexp').onclick=()=>{
-  const data={app:'MMV Terminal',version:3,saved:new Date().toISOString(),state:S};
+  const data={app:'MMV Terminal',version:3,format:'standard',encrypted:false,secrets:'excluded',saved:new Date().toISOString(),state:window._cred.stdState()};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),a=document.createElement('a');
   a.href=URL.createObjectURL(blob);a.download='mmv-terminal-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
   toast('Backup file downloaded');
@@ -793,7 +827,7 @@ $('#bfile').onchange=e=>{
     try{
       const d=JSON.parse(rd.result);
       if(!d||d.app!=='MMV Terminal'||!d.state||typeof d.state.lists!=='object')throw new Error('not a backup');
-      LS.set('mmv3',d.state);toast('Backup restored. Reloading...');setTimeout(()=>location.reload(),700);
+      try{localStorage.setItem('mmv3_prerestore',localStorage.getItem('mmv3')||'')}catch(e){}localStorage.setItem('mmv3',JSON.stringify(d.state));window._noFlush=1;toast('Backup restored. Your previous data was kept as a safety copy. Reloading...');setTimeout(()=>location.reload(),700);
     }catch(err){toast('That file is not a valid MMV backup')}
   };
   rd.readAsText(file);e.target.value='';
@@ -832,7 +866,7 @@ async function writeBackup(force){
     if(perm!=='granted'&&force)perm=await bh.requestPermission({mode:'readwrite'});
     if(perm!=='granted'){bkState='paused';return bkUI()}
     const w=await bh.createWritable();
-    await w.write(JSON.stringify({app:'MMV Terminal',version:3,saved:new Date().toISOString(),state:S},null,2));
+    await w.write(JSON.stringify({app:'MMV Terminal',version:3,format:'standard',encrypted:false,secrets:'excluded',saved:new Date().toISOString(),state:window._cred.stdState()},null,2));
     await w.close();bkLast=Date.now();bkState='ok';
   }catch(e){bkState='error'}
   bkUI();
@@ -936,7 +970,7 @@ openCo=function(s){const r=_ocFn(s);const u=String(s).toUpperCase();fundOne(u).t
 const _dbv=drawBizView;
 drawBizView=function(){_dbv();const z=$('#bizin');if(z&&!z.querySelector('.csvx'))z.insertAdjacentHTML('beforeend','<div class="csvx" style="margin-top:6px"><button class="btn" onclick="exportBizCsv()">EXPORT THIS BUSINESS TO CSV (opens in Excel / Numbers / Sheets)</button></div>')};
 function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:type||'text/csv'}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
-const csvCell=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+const csvCell=v=>{if(typeof v==='string'&&/^[=+\-@\t\r]/.test(v)&&isNaN(+v))v="'"+v;/* v13.3: stops spreadsheet formula injection in exported files */v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
 const toCsv=(head,rows)=>[head,...rows].map(r=>r.map(csvCell).join(',')).join('\n');
 function exportBizCsv(){
   const b=curBiz();if(!b)return toast('No business to export yet');const D=b.data;let t='';
@@ -1420,7 +1454,7 @@ function wsConnect(){
   ws.onopen=()=>{wsBack=5000;wsSubs=new Set();wsSync()};
   ws.onmessage=ev=>{let j;try{j=JSON.parse(ev.data)}catch(e){return}
     if(j.type!=='trade'||!j.data)return;
-    j.data.forEach(d=>{const r=R[d.s];if(!r||!(d.p>0))return;const old=r.last;r.last=d.p;r.hi=Math.max(r.hi||d.p,d.p);r.lo=Math.min(r.lo||d.p,d.p);r.tv=(r.tv||0)+(d.v||0);r.live=true;r.qt=Date.now();lastOk=Date.now();
+    j.data.forEach(d=>{const r=R[d.s];if(!r||!okPx(d.p))return;const old=r.last;r.last=d.p;r.hi=Math.max(r.hi||d.p,d.p);r.lo=Math.min(r.lo||d.p,d.p);r.tv=(r.tv||0)+(d.v||0);r.live=true;r.qt=Date.now();lastOk=Date.now();
       if(Date.now()-(r.wt||0)>2000){r.hist.push(d.p);if(r.hist.length>400)r.hist.shift();r.wt=Date.now()}
       wsPend[d.s]=d.p>old?1:d.p<old?-1:(wsPend[d.s]||0)})};
   ws.onclose=()=>{wsSubs=new Set();wsPill();clearTimeout(wsTimer);if(S.fh&&!S.wsOff){wsTimer=setTimeout(wsConnect,wsBack);wsBack=Math.min(wsBack*2,60000)}};
@@ -1642,7 +1676,7 @@ function bkCheck(){const p=$('#bkdue');if(!p)return;const age=bkAge(),due=hasDat
 setInterval(bkCheck,60000);setTimeout(bkCheck,3000);
 
 /* ===================== CLEANUP: tab order, short labels, STATUS diagnostics, help ===================== */
-const VERSION='13.2';
+const VERSION='13.4';
 (function(){const st=document.createElement('style');st.textContent='#status>div{width:min(820px,92%);max-height:90%;overflow:auto}#status td{white-space:normal;word-break:break-word}';document.head.appendChild(st)})();
 (function(){
   const FULL={home:'Home',mon:'Monitor',heat:'Heatmap',mov:'Movers',chart:'Chart',scr:'Screener',news:'News',cfx:'Crypto and FX',port:'Portfolio',inv:'Invest',jr:'Journal',radar:'Radar',cal:'Calendar',alert:'Alerts',biz:'Business',school:'School'};
@@ -1822,7 +1856,7 @@ const osh=window.show;window.show=function(){thrReset();return osh.apply(this,ar
 
 /* --- daily snapshots of all your data (kept 14 days, independent of the backup file) --- */
 const SK='snaps';let snapT=0;
-async function snapTake(force){try{if(!hasData())return;const js=JSON.stringify(S),day=todayS();let L=(await idbGet(SK))||[];
+async function snapTake(force){try{if(!hasData())return;const js=window._cred.json(S),day=todayS();let L=(await idbGet(SK))||[];
   const i=L.findIndex(x=>x.d===day);if(i>=0&&!force&&Date.now()-L[i].t<6e5&&L[i].j.length===js.length)return;
   const e={d:day,t:Date.now(),j:js};if(i>=0)L[i]=e;else L.push(e);L.sort((a,b)=>a.d<b.d?-1:1);if(L.length>14)L=L.slice(-14);await idbSet(SK,L);snapT=Date.now()}catch(e){}}
 setInterval(()=>snapTake(false),600000);setTimeout(()=>snapTake(false),20000);addEventListener('beforeunload',()=>{});
@@ -1832,7 +1866,7 @@ window.openSnaps=async function(){await snapTake(true);const L=((await idbGet(SK
    (L.length?'<table>'+L.map(x=>{let n='';try{const o=JSON.parse(x.j);n=(o.port||[]).length+' positions, '+(o.jr||[]).length+' trades'}catch(e){}return `<tr><td style="text-align:left">${esc(x.d)} <small>${new Date(x.t).toLocaleTimeString()}</small></td><td><small>${n} &middot; ${Math.round(x.j.length/1024)} KB</small></td><td><button class="btn" onclick="snapRestore('${x.d}')">RESTORE</button></td></tr>`}).join('')+'</table>':'<div style="margin:8px 0">Nothing saved yet. Add some data first.</div>');
   m.classList.add('on')};
 window.snapRestore=async function(d){const L=(await idbGet(SK))||[],x=L.find(y=>y.d===d);if(!x)return;if(!confirm('Replace your current data with the copy from '+d+'?\n\nYour current data is saved as a snapshot first.'))return;
-  const cur={d:'before-restore',t:Date.now(),j:JSON.stringify(S)};const L2=L.filter(y=>y.d!=='before-restore');L2.push(cur);await idbSet(SK,L2);LS.set('mmv3',JSON.parse(x.j));toast('Restored. Reloading...');setTimeout(()=>location.reload(),600)};
+  const cur={d:'before-restore',t:Date.now(),j:window._cred.json(S)};const L2=L.filter(y=>y.d!=='before-restore');L2.push(cur);await idbSet(SK,L2);localStorage.setItem('mmv3',x.j);window._noFlush=1;toast('Restored. Reloading...');setTimeout(()=>location.reload(),600)};
 const oc=window.cmd;window.cmd=function(t){const a=String(t).trim().toUpperCase();if(a==='SNAP'||a==='SNAPSHOTS'||a==='RESTORE')return openSnaps();return oc.apply(this,arguments)};
 
 /* --- guard: never overwrite the backup file with an empty app --- */
@@ -2032,17 +2066,17 @@ const pill=document.createElement('span');pill.id='savedpill';pill.className='pi
 const bp=$('#bkpill');bp.parentNode.insertBefore(pill,bp);let savedAt=Date.now();const upPill=()=>{pill.textContent='SAVED '+new Date(savedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})};upPill();
 
 /* safety net: if anything changed without being saved, save it; also keep a second copy in IndexedDB */
-let last=JSON.stringify(S),warm=Date.now()+4000;
+let last=window._cred.json(S),warm=Date.now()+4000;
 function mirror(js){idbSet('mirror',{t:Date.now(),j:js})}
-setInterval(()=>{try{const js=JSON.stringify(S);if(js!==last){last=js;LS.set('mmv3',S);savedAt=Date.now();upPill();if(Date.now()>warm)mirror(js)}}catch(e){}},2000);
+setInterval(()=>{try{const js=window._cred.json(S);if(js!==last){last=js;LS.set('mmv3',S);savedAt=Date.now();upPill();if(Date.now()>warm)mirror(js)}}catch(e){}},2000);
 
 /* when the window is closed or hidden: commit whatever field you are typing in, remember unsent form text, save */
 const skip=el=>!el||el.id==='cmd'||el.type==='password'||el.type==='file'||el.type==='checkbox'||el.type==='radio'||el.type==='button'||/^(tk-k|tk-q|fk|ks)/.test(el.id)||el.closest('.modal');
 function snapDraft(){const o=LS.get(DK,null)||{};document.querySelectorAll('.view input[id],.view textarea[id]').forEach(el=>{if(skip(el))return;if(el.value&&el.value!==el.defaultValue)o[el.id]=el.value;else delete o[el.id]});
   Object.keys(o).length?LS.set(DK,o):localStorage.removeItem(DK)}
 let dT=0;document.addEventListener('input',()=>{clearTimeout(dT);dT=setTimeout(()=>{try{snapDraft()}catch(e){}},400)},true);
-function flush(){try{const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&!skip(a))a.blur()}catch(e){}
-  try{snapDraft()}catch(e){}try{LS.set('mmv3',S);if(has())idbSet('mirror',{t:Date.now(),j:JSON.stringify(S)})}catch(e){}
+function flush(){if(window._noFlush)return;try{const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&!skip(a))a.blur()}catch(e){}
+  try{snapDraft()}catch(e){}try{LS.set('mmv3',S);if(has())idbSet('mirror',{t:Date.now(),j:window._cred.json(S)})}catch(e){}
   try{if(typeof bh!=='undefined'&&bh)writeBackup(false)}catch(e){}}
 addEventListener('pagehide',flush);addEventListener('beforeunload',flush);document.addEventListener('visibilitychange',()=>{if(document.hidden)flush()});
 setInterval(()=>{try{snapDraft()}catch(e){}},5000);   // also kept while you type, in case the window is force-quit
@@ -2062,13 +2096,13 @@ document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('.vi
   let src=null,why='';
   try{const m=await idbGet('mirror');if(m&&m.j){const o=JSON.parse(m.j);if(o&&o.port&&((o.port.length)||(o.jr&&o.jr.length)||(o.school&&o.school.classes&&o.school.classes.length)||(o.alerts&&o.alerts.length)||(o.bd&&o.bd.list&&o.bd.list.some(b=>JSON.stringify(b.data).length>120)))){src=o;why='the saved copy from '+tm(m.t)}}}catch(e){}
   if(!src)try{const L=(await idbGet('snaps'))||[];for(let i=L.length-1;i>=0;i--){const o=JSON.parse(L[i].j);if(o&&o.port&&(o.port.length||(o.jr&&o.jr.length)||(o.school&&o.school.classes&&o.school.classes.length))){src=o;why='the snapshot from '+L[i].d;break}}}catch(e){}
-  if(src&&!sessionStorage.getItem('mmv_rec')){sessionStorage.setItem('mmv_rec','1');LS.set('mmv3',src);toast('Your data was empty, so I restored '+why+'. Reloading...');setTimeout(()=>location.reload(),1200);return}
+  if(src&&!sessionStorage.getItem('mmv_rec')){sessionStorage.setItem('mmv_rec','1');try{localStorage.setItem('mmv3',JSON.stringify(src))}catch(e){}window._noFlush=1;toast('Your data was empty, so I restored '+why+'. Reloading...');setTimeout(()=>location.reload(),1200);return}
   if(boot.n>2){banner()}
 })();
 function banner(){const b=document.createElement('div');b.style.cssText='position:fixed;left:50%;top:44px;transform:translateX(-50%);z-index:90;background:var(--bg);border:2px solid var(--ac);padding:10px 14px;max-width:560px;line-height:1.5';
   b.innerHTML='<b class="arrow">No data found in this window.</b> This app has been opened '+boot.n+' times, but nothing is saved here. Chrome may have opened a different profile, or cleared site data. <div style="margin-top:6px"><button class="btn" id="rb-f">RESTORE FROM BACKUP FILE</button> <button class="btn" id="rb-x">DISMISS</button></div><input type="file" id="rb-i" accept=".json,application/json" style="display:none">';
   document.body.appendChild(b);$('#rb-x').onclick=()=>b.remove();$('#rb-f').onclick=()=>$('#rb-i').click();
-  $('#rb-i').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!d||d.app!=='MMV Terminal'||!d.state)throw 0;LS.set('mmv3',d.state);toast('Restored. Reloading...');setTimeout(()=>location.reload(),700)}catch(x){toast('That file is not a valid MMV backup')}};rd.readAsText(f)}}
+  $('#rb-i').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!d||d.app!=='MMV Terminal'||!d.state||typeof d.state!=='object'||typeof d.state.lists!=='object')throw 0;try{localStorage.setItem('mmv3_prerestore',localStorage.getItem('mmv3')||'')}catch(e){}localStorage.setItem('mmv3',JSON.stringify(d.state));window._noFlush=1;toast('Restored. Your previous data was kept as a safety copy. Reloading...');setTimeout(()=>location.reload(),700)}catch(x){toast('That file is not a valid MMV backup')}};rd.readAsText(f)}}
 
 /* STATUS rows */
 const osr=window.statusRows;window.statusRows=function(){const r=osr.apply(this,arguments);
@@ -2362,7 +2396,7 @@ bars=function(id,labels,A,B,la,lb){if([...A,...B].every(v=>!v)){const cv=documen
   return _bars.apply(this,arguments)};
 /* ---------- empty states ---------- */
 function empty(host,key,title,text,btn,act){const h=typeof host==='string'?$(host):host;if(!h||h.querySelector('.empty[data-k="'+key+'"]'))return;h.insertAdjacentHTML('afterbegin',`<div class="empty" data-k="${key}"><b>${title}</b>${text}${btn?`<div style="margin-top:8px"><button class="btn pri" onclick="${act}">${btn}</button></div>`:''}</div>`)}
-const wrap=(name,fn)=>{const o=window[name]||eval(name);window[name]=function(){const r=o.apply(this,arguments);try{fn()}catch(e){}return r}};
+const wrap=(name,fn)=>{const o=window[name];if(typeof o!=='function')return;window[name]=function(){const r=o.apply(this,arguments);try{fn()}catch(e){}return r}};
 wrap('drawPort',()=>{if(!S.port.length)empty('#portbox','p','Start your portfolio','Add each stock you own with shares and cost, and this page tracks value, profit and loss, and today\'s change.','ADD YOUR FIRST HOLDING',"$('#pa-s').focus()")});
 wrap('drawAlerts',()=>{if(!S.alerts.length)empty('#alertbox','a','No alerts yet','Pick a stock below and set a price. You\'ll get a banner and sound while the app is open, and on your phone if you install the alert watcher.','','')});
 wrap('drawSchool',()=>{if(!S.school.classes.length)empty('#schoolbox','s','Add your classes first','Enter a class in the middle box below. Tasks, grades and the study timer all hang off your classes.','','')});
@@ -3366,7 +3400,7 @@ function forecast(days){const t=T(),end=addD(t,days),ev=[],M=IM();
  const burn=Math.max(0,persSpend()-(M.bills||0))/30;let bal=cashNow();const by={};ev.forEach(e=>(by[e.d]=by[e.d]||[]).push(e));const ser=[{d:t,b:bal}];let low={d:t,b:bal};
  for(let i=1;i<=days;i++){const d=addD(t,i);bal+=(by[d]||[]).reduce((s,e)=>s+e.a,0)-burn;ser.push({d,b:bal});if(bal<low.b)low={d,b:bal}}
  return{start:cashNow(),ser,ev:ev.sort((a,b)=>a.d<b.d?-1:1),low,end:bal,burn,wk,days}}
-window._forecast=forecast;
+window._forecast=forecast;window._recDates=recDates;
 const fcTh=()=>Math.max(300,(IM().spend||0)*.25);
 window.fcDays=v=>{S.fc.days=+v||60;save();drawMoney()};window.fcOwed=v=>{S.fc.owed=v?1:0;save();drawMoney()};
 function fcBox(){const days=S.fc.days||60,R=forecast(days),th=fcTh(),cls=R.low.b<0?'dn':R.low.b<th?'':'up';
@@ -3647,7 +3681,7 @@ window.ivnSet=(s,k,v)=>{const n=X.notes[s]=X.notes[s]||{why:'',rev:''};n[k]=v;if
 function jnBox(){const H=hold(),t=T(),due=H.filter(h=>X.notes[h.s]&&X.notes[h.s].rev&&X.notes[h.s].rev<=t);
  return box('ivjn','WHY I OWN IT','one line per holding, and a date to re-check',
  `${due.length?`<div class="dn" style="margin-bottom:4px"><b>Time to review: ${due.map(h=>esc(h.s)).join(', ')}</b></div>`:''}
- ${H.length?`<table><tr><th style="text-align:left">HOLDING</th><th style="text-align:left">MY REASON</th><th>REVIEW ON</th><th>GAIN</th></tr>${H.map(h=>{const n=X.notes[h.s]||{},g=h.c>0?(h.v/h.c-1)*100:0,d=n.rev&&n.rev<=t;return `<tr${d?' style="outline:1px solid var(--dn)"':''}><td style="text-align:left">${esc(h.s)}</td><td style="text-align:left"><input value="${esc(n.why||'')}" size="30" placeholder="Why did I buy this?" onchange="ivnSet('${h.s}','why',this.value)" onkeydown="event.stopPropagation()"></td><td><input type="date" value="${esc(n.rev||'')}" onchange="ivnSet('${h.s}','rev',this.value)"></td><td class="${g>=0?'up':'dn'}">${g>=0?'+':''}${f(g,1)}%</td></tr>`}).join('')}</table>`:'<small>Add holdings in PORT.</small>'}
+ ${H.length?`<table><tr><th style="text-align:left">HOLDING</th><th style="text-align:left">MY REASON</th><th>REVIEW ON</th><th>GAIN</th></tr>${H.map(h=>{const n=X.notes[h.s]||{},g=h.c>0?(h.v/h.c-1)*100:0,d=n.rev&&n.rev<=t;return `<tr${d?' style="outline:1px solid var(--dn)"':''}><td style="text-align:left">${esc(h.s)}</td><td style="text-align:left"><input value="${esc(n.why||'')}" size="30" placeholder="Why did I buy this?" onchange="ivnSet('${esc(h.s)}','why',this.value)" onkeydown="event.stopPropagation()"></td><td><input type="date" value="${esc(n.rev||'')}" onchange="ivnSet('${esc(h.s)}','rev',this.value)"></td><td class="${g>=0?'up':'dn'}">${g>=0?'+':''}${f(g,1)}%</td></tr>`}).join('')}</table>`:'<small>Add holdings in PORT.</small>'}
  <div style="margin-top:4px"><small>When the review date comes, ask: is the reason I wrote still true? If yes, keep holding. If no, that is a reason to sell, not the price alone.</small></div>`)}
 /* assemble */
 const _d43=drawInv;drawInv=function(){_d43.apply(this,arguments);const b=$('#invbox');if(!b)return;try{b.querySelectorAll('#invx2').forEach(x=>x.remove());
@@ -3944,7 +3978,7 @@ function sim(cards,extra,mode){const C=cards.map(c=>({n:c.name,b:+c.bal,r:(+c.ap
  while(C.some(c=>c.b>.005)&&mo<600){mo++;C.forEach(c=>{if(c.b>0){const i=c.b*c.r;c.b+=i;tot+=i}});let pool=extra;C.forEach(c=>{if(c.b>0){const p=Math.min(c.b,c.m);c.b-=p}else pool+=c.m});
   const order=[...C].filter(c=>c.b>.005).sort((a,z)=>mode==='snowball'?a.b-z.b:z.r-a.r||a.b-z.b);for(const c of order){if(pool<=0)break;const p=Math.min(c.b,pool);c.b-=p;pool-=p}C.forEach(c=>{if(c.b<=.005&&paidAt[c.n]==null)paidAt[c.n]=mo});}
  const stuck=C.some(c=>c.b>.005);return{mo,tot,paidAt,stuck}}
-window.poSet=(k,v)=>{MX.po[k]=k==='extra'?pn(v):v;save();redraw()};
+window._sim=sim;window.poSet=(k,v)=>{MX.po[k]=k==='extra'?pn(v):v;save();redraw()};
 function debtBox(){const cards=(F.cards||[]).filter(c=>+c.bal>0);if(!cards.length)return bx('dpbox','DEBT PAYOFF PLANNER','get out of card debt faster','<div class="up">No card balances. Nothing to pay off.</div>');
  const base=sim(cards,0,MX.po.mode),plan=sim(cards,MX.po.extra,MX.po.mode),p50=sim(cards,MX.po.extra+50,MX.po.mode),alt=sim(cards,MX.po.extra,MX.po.mode==='avalanche'?'snowball':'avalanche'),when=m=>{const d=new Date();d.setMonth(d.getMonth()+m);return MN[d.getMonth()]+' '+d.getFullYear()},tot=cards.reduce((s,c)=>s+(+c.bal||0),0),mi=cards.reduce((s,c)=>s+(+c.bal||0)*(+c.apr||0)/1200,0);
  const util=cards.filter(c=>+c.limit>0).map(c=>({c,u:c.bal/c.limit,to30:Math.max(0,c.bal-c.limit*.3),to10:Math.max(0,c.bal-c.limit*.1)}));
@@ -4763,7 +4797,7 @@ const lastHist=i=>(i.hist||[]).slice(-1)[0];
 const safeUrl=u=>/^https?:\/\//i.test(u||'');
 const find=id=>VT.items.find(x=>x.id===id);
 /* ---------- actions ---------- */
-window.vtAdd=()=>{const n=($('#vt-n').value||'').trim();if(!n)return toast('Enter a name');const d=$('#vt-d').value||'';
+window.vtAdd=()=>{if(!$('#vt-n')||!$('#vt-d'))return;const n=($('#vt-n').value||'').trim();if(!n)return toast('Enter a name');const d=$('#vt-d').value||'';
  VT.items.push({id:uid(),name:n,cat:$('#vt-c').value,date:d,cost:pn($('#vt-m').value),cyc:+$('#vt-y').value,leads:($('#vt-l').value||'30,7,1').trim(),note:($('#vt-o').value||'').trim(),hist:[],claims:[]});save();draw()};
 window.vtQ=(k,v)=>{UI[k]=v;list()};window.vtTog=k=>{UI[k]=UI[k]?0:1;draw()};
 window.vtOpen=id=>{UI.open=UI.open===id?'':id;list()};
@@ -5522,7 +5556,7 @@ function tag(){const s=openSym,r=R[s],m=mkt();if(!S.fh||!r||!r.live)return['SIMU
  if(m.open&&Date.now()-(r.wt||0)<30000)return['LIVE TICKS','live'];if(m.open)return['QUOTE '+Math.round(age/1000)+'s OLD','warn'];return['LAST TRADE','sim']}
 /* ---------- fetchers ---------- */
 function restQuote(){const s=openSym;if(!s||!S.fh||ST.rq)return;const r=R[s];if(r&&Date.now()-(r.wt||0)<8000)return;ST.rq=1;
- fh('quote?symbol='+encodeURIComponent(s),true).then(j=>{ST.rq=0;if(j&&j.c){const r=ensure(s),o=r.last;r.last=j.c;r.prev=j.pc||j.c;r.hi=j.h;r.lo=j.l;r.op=j.o;r.live=true;r.qt=Date.now();r.hist.push(j.c);if(r.hist.length>400)r.hist.shift();ST.lastRest=Date.now();lastOk=Date.now();paintAll(s,j.c>o?1:j.c<o?-1:0)}})}
+ fh('quote?symbol='+encodeURIComponent(s),true).then(j=>{ST.rq=0;if(j&&okPx(j.c)){const r=ensure(s),o=r.last;r.last=j.c;r.prev=okPx(j.pc)?j.pc:j.c;r.hi=j.h;r.lo=j.l;r.op=j.o;r.live=true;r.qt=Date.now();r.hist.push(j.c);if(r.hist.length>400)r.hist.shift();ST.lastRest=Date.now();lastOk=Date.now();paintAll(s,j.c>o?1:j.c<o?-1:0)}})}
 function vsQuotes(){const s=openSym;if(!s||!S.fh)return;const etf=ETF[SECT[s]];['SPY'].concat(etf?[etf]:[]).forEach(x=>fh('quote?symbol='+x,true).then(j=>{if(j&&j.c)ST.vs[x]={c:j.c,pc:j.pc,t:Date.now()}}))}
 function getMetric(){const s=openSym;if(!s||!S.fh)return;if(ST.mt[s]&&Date.now()-ST.mt[s].t<6e5)return drawPerf();fh('stock/metric?symbol='+encodeURIComponent(s)+'&metric=all',true).then(j=>{ST.mt[s]={t:Date.now(),m:(j&&j.metric)||null};if(openSym===s)drawPerf()})}
 function getMS(){if(!S.fh||Date.now()-ST.msT<3e5)return;ST.msT=Date.now();fh('stock/market-status?exchange=US',true).then(j=>{if(j&&typeof j==='object'&&'isOpen' in j){ST.ms=j;ST.msT=Date.now()}})}
@@ -5746,13 +5780,13 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 (function(){
 if(window._sy63)return;window._sy63=1;
 const KEY='mmv3_sync',DESC='MMV Terminal sync (encrypted)',FILE='mmv.enc';
-const cfg=LS.get(KEY,{});const saveCfg=()=>LS.set(KEY,cfg);
+const cfg=LS.get(KEY,{});if(window._cred)window._cred.initCfg(cfg);const saveCfg=()=>LS.set(KEY,window._cred?window._cred.cfgOut(cfg):cfg);
 const EX=['theme','look','dens','fs','pal','active','fold','wsOff','fund','scans'];
 const BIG=30000;
 const enc=new TextEncoder(),dec=new TextDecoder();
 const b64=u=>{let s='';const a=new Uint8Array(u);for(let i=0;i<a.length;i+=32768)s+=String.fromCharCode.apply(null,a.subarray(i,i+32768));return btoa(s)};
 const unb=t=>{const s=atob(t),a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a};
-function payload(o){return JSON.stringify(o||S,function(k,v){if(this===(o||S)&&(EX.indexOf(k)>=0||k==='_ts'))return undefined;if(typeof v==='string'&&v.length>BIG&&v.slice(0,5)==='data:')return undefined;if(k==='seenT'&&this===S.radar)return undefined;return v})}
+function payload(o){return JSON.stringify(o||S,function(k,v){if(this===(o||S)&&(EX.indexOf(k)>=0||k==='_ts'))return undefined;if(typeof v==='string'&&v.length>BIG&&v.slice(0,5)==='data:')return undefined;if(k==='seenT'&&this===S.radar)return undefined;if(this===(o||S)&&(k==='fh'||k==='td'||k==='aiskey'))return undefined;if(k==='topic'&&this===(o||S).radar)return undefined;return v})}
 function hash(str){let h=5381;for(let i=0;i<str.length;i++)h=((h<<5)+h+str.charCodeAt(i))|0;return h+':'+str.length}
 function bigs(o,p,out){if(o&&typeof o==='object'){for(const k in o){const v=o[k],q=p+'\u0001'+k;if(typeof v==='string'&&v.length>BIG&&v.slice(0,5)==='data:')out[q]=v;else if(v&&typeof v==='object')bigs(v,q,out)}}return out}
 function inject(o,p,m){if(o&&typeof o==='object'){for(const k in o){const q=p+'\u0001'+k,v=o[k];if(v&&typeof v==='object')inject(v,q,m)}}}
@@ -5783,7 +5817,7 @@ async function run(manual){if(!cfg.token||!cfg.pass||st.busy)return;st.busy=1;pi
     else{try{localStorage.removeItem('mmv3_rl')}catch(e){}}
     try{const rl2=JSON.parse(localStorage.getItem('mmv3_rl')||'[]').filter(t=>Date.now()-t<600000);rl2.push(Date.now());localStorage.setItem('mmv3_rl',JSON.stringify(rl2))}catch(e){}
     const remote=await open(txt,cfg.pass);if(dirty){try{localStorage.setItem('mmv3_lostedit',JSON.stringify({at:Date.now(),data:S}))}catch(e){}}
-    const m=bigs(S,'',{});const ns=remote;EX.forEach(k=>{if(k in S)ns[k]=S[k]});reinject(ns,m);ns._ts=rts;
+    const m=bigs(S,'',{});const ns=remote;EX.forEach(k=>{if(k in S)ns[k]=S[k]});['fh','td','aiskey'].forEach(k=>{ns[k]=S[k]||''});{const lt=S.radar&&S.radar.topic,pr=window._cred&&['locked','unlocked'].includes(window._cred.status());if(ns.radar&&typeof ns.radar==='object'){if(lt&&!pr)ns.radar.topic=lt;else delete ns.radar.topic}}reinject(ns,m);ns._ts=rts;
     const hh=hash(payload(ns));cfg.pushedHash=hh;cfg.lastHash=hh;saveCfg();
     Object.keys(S).forEach(k=>delete S[k]);Object.assign(S,ns);LS.set('mmv3',S);cfg.last=Date.now();saveCfg();
     toast('Updated from your other device'+(dirty?'. Your unsynced edits on this device were replaced; a copy was kept.':''));setTimeout(()=>location.reload(),700);return}
@@ -6006,7 +6040,7 @@ const sbar=document.createElement('div');sbar.id='sbar';document.body.appendChil
 const bar=document.getElementById('bar');
 const crumb=document.createElement('span');crumb.id='wscrumb';const lg=bar.querySelector('.logo');if(lg)lg.after(crumb);else bar.insertBefore(crumb,bar.firstChild);
 let cur=NV.cur||null;
-function itemHtml(it,fav){const f=NV.fav.indexOf(it.id)>=0;return '<button class="si'+(cur===it.id?' on':'')+'" data-id="'+it.id.replace(/"/g,'&quot;')+'" title="'+it.label.replace(/"/g,'&quot;')+'">'+ico(it.icon)+'<span class="lb">'+it.label.replace(/&/g,'&amp;')+'</span>'+(fav?'<span class="fup" data-fup="1" title="Move up">&#9650;</span>':'')+'<span class="fv'+(f?' on':'')+'" data-fav="1" title="'+(f?'Remove from favorites':'Add to favorites')+'">'+ico('star',12).replace('fill="none"','fill="'+(f?'currentColor':'none')+'"')+'</span></button>'}
+function itemHtml(it,fav){const f=NV.fav.indexOf(it.id)>=0;return '<button class="si'+(cur===it.id?' on':'')+'" data-id="'+esc(it.id)+'" title="'+esc(it.label)+'">'+ico(it.icon)+'<span class="lb">'+esc(it.label)+'</span>'+(fav?'<span class="fup" data-fup="1" title="Move up">&#9650;</span>':'')+'<span class="fv'+(f?' on':'')+'" data-fav="1" title="'+(f?'Remove from favorites':'Add to favorites')+'">'+ico('star',12).replace('fill="none"','fill="'+(f?'currentColor':'none')+'"')+'</span></button>'}
 function build(){
  const sl0=side.querySelector('.sl'),st0=sl0?sl0.scrollTop:0;
  const fav=NV.fav.map(byId).filter(Boolean),fr=Object.entries(NV.cnt).filter(([k,n])=>n>=4&&NV.fav.indexOf(k)<0&&byId(k)).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>byId(x[0]));
@@ -6041,7 +6075,7 @@ function mark(){
  if(act&&sn&&!(it.sub)){const s2=document.createElement('span');s2.className='sb2';s2.textContent=sn;act.querySelector('.lb').after(s2)}
  if(gname&&NV.g[gname]){NV.g[gname]=false;sv();const ge=side.querySelector('.grp[data-g="'+gname+'"]');if(ge){ge.classList.remove('c');const t=ge.querySelector('.gt');if(t)t.setAttribute('aria-expanded','true')}}
  const pre=gname?gname.charAt(0)+gname.slice(1).toLowerCase()+' &rsaquo; ':'';const nm=it?it.label:(v||'').toUpperCase();
- crumb.innerHTML=pre+(sn&&it&&it.label!==sn?nm+' &rsaquo; <b>'+sn+'</b>':'<b>'+nm+'</b>');
+ crumb.innerHTML=pre+(sn&&it&&it.label!==sn?esc(nm)+' &rsaquo; <b>'+esc(sn)+'</b>':'<b>'+esc(nm)+'</b>');
  document.body.classList.toggle('nomacro',!(FIN.indexOf(v)>=0||v==='money')||!!NV.macroOff);
 }
 /* learn business names from the BIZ page so they appear in the sidebar */
@@ -6380,6 +6414,143 @@ window.openSync=function(){_o.apply(this,arguments);const m=document.getElementB
 };
 })();
 
+
+/* ===================== v13.4: credential vault (encrypt, lock, unlock, migrate), encrypted backups ===================== */
+(function(){
+if(window._v134)return;window._v134=1;
+const C=window._cred,st=C._st,enc=new TextEncoder(),dec=new TextDecoder();
+const $1=s=>document.querySelector(s);
+const b64=u=>{let s='';const a=u instanceof Uint8Array?u:new Uint8Array(u);for(let i=0;i<a.length;i+=0x8000)s+=String.fromCharCode.apply(null,a.subarray(i,i+0x8000));return btoa(s)};
+const unb=t=>Uint8Array.from(atob(t),c=>c.charCodeAt(0));
+const CFG=()=>(window._sync&&window._sync.cfg)||{};
+const N0=600000;
+async function derive(pw,salt,n){const km=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:n,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+async function sealWith(key,salt,n,obj,aad){const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:enc.encode(aad)},key,enc.encode(typeof obj==='string'?obj:JSON.stringify(obj)));return{v:1,kdf:'PBKDF2-SHA256',n,salt:b64(salt),iv:b64(iv),ct:b64(ct),ts:Date.now()}}
+async function openBlob(blob,pw,aad){const n=blob.n||N0,salt=unb(blob.salt),key=await derive(pw,salt,n);const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb(blob.iv),additionalData:enc.encode(aad)},key,unb(blob.ct));return{text:dec.decode(pt),key,salt,n}}
+const secretsNow=()=>({fh:S.fh||'',td:S.td||'',aiskey:S.aiskey||'',topic:(S.radar&&S.radar.topic)||'',token:CFG().token||'',pass:CFG().pass||''});
+const AADV='mmv-cred-v1',AADB='mmv-fullbackup-v1';
+function applySecrets(o){C.TOP.forEach(k=>{S[k]=o[k]||''});if(S.radar)S.radar.topic=o.topic||'';const c=CFG();if(o.token)c.token=o.token;else delete c.token;if(o.pass)c.pass=o.pass;else delete c.pass}
+function strip(o){if(!o||typeof o!=='object')return 0;let n=0;['fh','td','aiskey'].forEach(k=>{if(o[k]){o[k]='';n++}});if(o.radar&&typeof o.radar==='object'&&o.radar.topic){o.radar.topic='';n++}if(o.state&&typeof o.state==='object')n+=strip(o.state);return n}
+function stripText(t){return String(t).replace(/"(fh|td|aiskey|topic|token|pass)"\s*:\s*"[^"]{1,200}"/g,'"$1":""')}
+/* ---------- persist (re-encrypt when a secret changes) ---------- */
+let busy=false;
+C.persist=async function(){if(!st.has||st.locked||!st.key||busy)return;const s=JSON.stringify(secretsNow());if(s===st.last)return;busy=true;try{const blob=await sealWith(st.key,st.salt,st.n,s,AADV);localStorage.setItem('mmv3_cred',JSON.stringify(blob));st.last=s}catch(e){}busy=false};
+setInterval(()=>{if(!document.hidden)C.persist()},1500);
+/* ---------- scrubbing other copies this app manages ---------- */
+async function scrubOthers(doSnaps){const r={ls:0,mirror:0,snaps:0};
+ try{const le=JSON.parse(localStorage.getItem('mmv3_lostedit')||'null');if(le&&le.data){const n=strip(le.data);if(n){localStorage.setItem('mmv3_lostedit',JSON.stringify(le));r.ls++}}}catch(e){}
+ for(const k of ['mmv3_prerestore','mmv3_corrupt']){try{const t=localStorage.getItem(k);if(t){const t2=stripText(t);if(t2!==t){localStorage.setItem(k,t2);r.ls++}}}catch(e){}}
+ try{const m=await idbGet('mirror');if(m&&m.j){const t2=stripText(m.j);if(t2!==m.j){await idbSet('mirror',{t:m.t,j:t2});r.mirror++}}}catch(e){}
+ if(doSnaps){try{const L=(await idbGet('snaps'))||[];let ch=0;L.forEach(x=>{if(x&&x.j){const t2=stripText(x.j);if(t2!==x.j){x.j=t2;ch++}}});if(ch){await idbSet('snaps',L);r.snaps=ch}}catch(e){}}
+ return r}
+/* ---------- protect (first setup and migration) ---------- */
+C.protect=async function(pw,opts){opts=opts||{};if(st.has)throw new Error('already protected');if(typeof pw!=='string'||pw.length<10)throw new Error('Use a master password of at least 10 characters');
+ const sec=secretsNow(),salt=crypto.getRandomValues(new Uint8Array(16)),key=await derive(pw,salt,N0),blob=await sealWith(key,salt,N0,sec,AADV);
+ /* 1 write a pending copy, 2 verify it opens with the password and matches, 3 only then promote it */
+ localStorage.setItem('mmv3_cred_new',JSON.stringify(blob));
+ let ok=false;try{const back=JSON.parse(localStorage.getItem('mmv3_cred_new'));const o=await openBlob(back,pw,AADV);ok=o.text===JSON.stringify(sec)}catch(e){}
+ if(!ok){localStorage.removeItem('mmv3_cred_new');throw new Error('Verification failed. Nothing was changed.')}
+ localStorage.setItem('mmv3_cred',localStorage.getItem('mmv3_cred_new'));localStorage.removeItem('mmv3_cred_new');localStorage.setItem('mmv3_cred_mig','scrub');
+ st.has=true;st.locked=false;st.key=key;st.salt=salt;st.n=N0;st.last=JSON.stringify(sec);st.legacy={};
+ await C.scrub(!!opts.snaps);return true};
+C.scrub=async function(doSnaps){
+ const cur={};C.TOP.forEach(k=>cur[k]=S[k]);C.TOP.forEach(k=>C.hideTop(k,cur[k]));const tp=(S.radar&&S.radar.topic)||'';if(S.radar){delete S.radar.topic;C.hideRadar(tp)}
+ const c=CFG();try{window._sync&&0}catch(e){}
+ try{save()}catch(e){}
+ try{const raw=JSON.parse(localStorage.getItem('mmv3_sync')||'{}');delete raw.token;delete raw.pass;localStorage.setItem('mmv3_sync',JSON.stringify(raw))}catch(e){}
+ const r=await scrubOthers(doSnaps);
+ try{if(typeof writeBackup==='function'&&typeof bh!=='undefined'&&bh)await writeBackup(true)}catch(e){}
+ localStorage.removeItem('mmv3_cred_mig');localStorage.setItem('mmv3_cred_meta',JSON.stringify({at:Date.now(),scrub:r}));banner();return r};
+/* resume an interrupted scrub on startup (the vault was already verified before this flag was set) */
+if(st.has&&localStorage.getItem('mmv3_cred_mig')==='scrub'){setTimeout(()=>{if(S.radar&&!Object.getOwnPropertyDescriptor(S.radar,'topic').get){}C.scrub(false)},800)}
+if(st.has){const t=S.radar&&S.radar.topic;if(S.radar){st.legacy.topic=t||'';delete S.radar.topic;C.hideRadar('')}}
+/* ---------- unlock and lock ---------- */
+C.unlock=async function(pw){if(!st.has)throw new Error('no vault');const now=Date.now();if(now<st.wait)throw new Error('Too many wrong attempts. Wait '+Math.ceil((st.wait-now)/1000)+' seconds.');
+ let blob;try{blob=JSON.parse(localStorage.getItem('mmv3_cred'))}catch(e){throw new Error('The stored credential file is damaged. You can reset it and type your keys again.')}
+ let o;try{o=await openBlob(blob,pw,AADV)}catch(e){st.fails++;if(st.fails>=3)st.wait=Date.now()+Math.min(30000,1000*Math.pow(2,st.fails-3));throw new Error('Wrong password.')}
+ st.fails=0;st.wait=0;const sec=JSON.parse(o.text);
+ let merged=false;['fh','td','aiskey','topic','token','pass'].forEach(k=>{if(!sec[k]&&st.legacy[k]){sec[k]=st.legacy[k];merged=true}});
+ st.key=o.key;st.salt=o.salt;st.n=o.n;st.locked=false;st.last=JSON.stringify(sec);applySecrets(sec);st.legacy={};st.act=Date.now();
+ if(merged){st.last='';C.persist()}
+ try{setMode()}catch(e){}try{show(view)}catch(e){}try{window._sync&&_sync.run(true)}catch(e){}banner();return true};
+C.lock=function(){if(!st.has||st.locked)return;st.mem={fh:'',td:'',aiskey:'',topic:'',token:'',pass:''};st.key=null;st.locked=true;st.last='';const c=CFG();delete c.token;delete c.pass;
+ try{setMode()}catch(e){}try{show(view)}catch(e){}banner();toast('Locked. Live prices and sync are paused until you unlock.')};
+C.changePw=async function(oldPw,newPw){if(newPw.length<10)throw new Error('Use at least 10 characters');if(!st.has||st.locked)throw new Error('Unlock first');let blob=JSON.parse(localStorage.getItem('mmv3_cred'));await openBlob(blob,oldPw,AADV).catch(()=>{throw new Error('Current password is wrong.')});
+ const salt=crypto.getRandomValues(new Uint8Array(16)),key=await derive(newPw,salt,N0),nb=await sealWith(key,salt,N0,secretsNow(),AADV);localStorage.setItem('mmv3_cred',JSON.stringify(nb));st.key=key;st.salt=salt;st.n=N0;st.last=JSON.stringify(secretsNow())};
+C.reset=function(){localStorage.removeItem('mmv3_cred');localStorage.removeItem('mmv3_cred_new');localStorage.removeItem('mmv3_cred_mig');st.has=false;st.locked=false;st.key=null;banner()};
+/* idle auto-lock */
+['pointerdown','keydown','touchstart'].forEach(e=>addEventListener(e,()=>{st.act=Date.now()},{passive:true,capture:true}));
+setInterval(()=>{if(st.has&&!st.locked&&st.idle>0&&Date.now()-st.act>st.idle*60000)C.lock()},10000);
+/* ---------- encrypted full backup and standard backup ---------- */
+C.encBackup=async function(pw){if(typeof pw!=='string'||pw.length<10)throw new Error('Use a backup password of at least 10 characters');const salt=crypto.getRandomValues(new Uint8Array(16)),key=await derive(pw,salt,N0);
+ const body={state:JSON.parse(JSON.stringify(S)),secrets:secretsNow()};const blob=await sealWith(key,salt,N0,body,AADB);return Object.assign({app:'MMV Terminal',format:'encrypted',version:4,saved:new Date().toISOString(),contains:'records and credentials, encrypted with AES-256-GCM'},blob)};
+C.decBackup=async function(file,pw){const o=await openBlob(file,pw,AADB).catch(()=>{throw new Error('Wrong password, or the file is damaged.')});return JSON.parse(o.text)};
+/* ---------- screens ---------- */
+const cardCss='background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:18px 20px;width:520px;max-width:96vw;max-height:92vh;overflow:auto;color:var(--fg)';
+function modal(id,title,body){let m=document.getElementById(id);if(!m){m=document.createElement('div');m.id=id;m.className='modal';document.body.appendChild(m);m.onclick=e=>{if(e.target===m)m.classList.remove('on')}}
+ m.innerHTML='<div style="'+cardCss+'"><div style="display:flex;justify-content:space-between;align-items:center"><b class="arrow" style="font-size:15px">'+title+'</b><button class="btn" data-x="1">CLOSE</button></div>'+body+'</div>';m.classList.add('on');m.querySelector('[data-x]').onclick=()=>m.classList.remove('on');return m}
+const pwIn=(id,ph)=>'<input id="'+id+'" type="password" placeholder="'+ph+'" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="width:100%;margin:4px 0" onkeydown="event.stopPropagation()">';
+C.openUnlock=function(){const m=modal('credm','UNLOCK','<p style="margin:8px 0"><small class="mut">Your API keys and sync login are locked. Enter your master password. It is never stored, so it cannot be recovered if you forget it.</small></p>'+pwIn('cr-p','Master password')+'<div id="cr-e" class="dn" style="min-height:18px"></div><div><button class="btn pri" id="cr-go">UNLOCK</button> <button class="btn" id="cr-reset" style="float:right">I FORGOT IT</button></div>');
+ const go=async()=>{const e=m.querySelector('#cr-e');e.textContent='';try{await C.unlock(m.querySelector('#cr-p').value);m.classList.remove('on');toast('Unlocked')}catch(x){e.textContent=x.message}};m.querySelector('#cr-go').onclick=go;m.querySelector('#cr-p').addEventListener('keydown',ev=>{if(ev.key==='Enter')go()});setTimeout(()=>m.querySelector('#cr-p').focus(),50);
+ m.querySelector('#cr-reset').onclick=()=>{if(!confirm('There is no way to recover a forgotten master password. Resetting deletes only the stored keys. Your records are not touched. You will type your Finnhub key, Twelve Data key and sync login again (make new ones if you wish). Reset now?'))return;C.reset();m.classList.remove('on');toast('Stored keys cleared. Enter them again in Setup.')}};
+C.openProtect=function(){const bhName=(typeof bh!=='undefined'&&bh)?bh.name:'';const m=modal('credm','PROTECT YOUR KEYS','<p style="margin:8px 0"><small class="mut">Encrypts your Finnhub key, Twelve Data key, phone-alert topic and sync login with a master password (AES-256-GCM, PBKDF2 with 600,000 rounds). They stop being stored in readable form here, in backups and in snapshots. You will type the master password when you open the terminal and after '+(st.idle||15)+' idle minutes. <b>Forget the password and the keys cannot be recovered</b>; your records are unaffected.</small></p>'+pwIn('cr-p','New master password (10+ characters)')+pwIn('cr-p2','Repeat it')+'<label style="display:flex;gap:6px;align-items:flex-start;margin:6px 0"><input type="checkbox" id="cr-sn" checked style="width:auto;margin-top:3px"><small>Also remove the keys from this app\'s own saved snapshots. (Snapshots are not deleted, only the keys inside them.)</small></label><div id="cr-e" class="dn" style="min-height:18px"></div><div><button class="btn pri" id="cr-go">PROTECT</button></div><div id="cr-r" style="margin-top:8px;font-size:12px;line-height:1.6"></div>');
+ m.querySelector('#cr-go').onclick=async()=>{const p=m.querySelector('#cr-p').value,p2=m.querySelector('#cr-p2').value,e=m.querySelector('#cr-e');e.textContent='';if(p!==p2)return e.textContent='The two passwords do not match.';if(p.length<10)return e.textContent='Use at least 10 characters.';if(/^(.)\1+$/.test(p))return e.textContent='Choose something less repetitive.';
+  m.querySelector('#cr-go').disabled=true;m.querySelector('#cr-go').textContent='WORKING...';try{const r=await C.protect(p,{snaps:m.querySelector('#cr-sn').checked});m.querySelector('#cr-r').innerHTML=exposure(r)}catch(x){e.textContent=x.message;m.querySelector('#cr-go').disabled=false;m.querySelector('#cr-go').textContent='PROTECT'}}};
+function exposure(){let meta={};try{meta=JSON.parse(localStorage.getItem('mmv3_cred_meta')||'{}')}catch(e){}const sc=meta.scrub||{};const bhName=(typeof bh!=='undefined'&&bh)?bh.name:'';
+ return '<b class="up">Protected and verified.</b> Keys are now locked behind your master password.<br>Cleaned in this app: saved data, sync settings, '+((sc.ls||0)+(sc.mirror||0))+' recovery copies, '+(sc.snaps||0)+' snapshots.<br><b>Copies this app cannot change, which may still hold your OLD keys:</b><ul style="margin:4px 0 4px 18px"><li>Backup files you exported before today'+(bhName?'; the automatic backup file "'+esc(bhName)+'" was just rewritten without keys':'')+'</li><li>Dated copies made by the Mac backup helper (folder .mmv/backups and iCloud Drive/MMV Backups)</li><li>The phone copy and any other device not yet updated</li><li>The file ais_key.txt if it is still in your MMV Terminal folder</li></ul>To be safe, make new keys: Finnhub dashboard (regenerate), Twelve Data dashboard (regenerate), GitHub token (create new with only the gist box, delete the old one), then enter them in Setup. Nothing was rotated or deleted for you.'}
+C.openManage=function(){const s=C.status();const lab={none:'No keys stored yet',legacy:'<b class="dn">NOT PROTECTED</b>: keys or sync login are stored in readable form',locked:'<b>LOCKED</b>',unlocked:'<b class="up">UNLOCKED</b>'}[s];
+ let body='<p style="margin:8px 0">Status: '+lab+'</p>';
+ if(s==='legacy'||s==='none')body+='<button class="btn pri" id="cr-p1">PROTECT MY KEYS</button><p style="margin:8px 0"><small class="mut">What this protects: keys typed into Setup, the phone-alert topic and the sync token and passphrase. It does not protect your records (portfolio, money, journal), which stay readable on this device and in standard backups. It does not stop malicious code running inside this page while unlocked.</small></p>';
+ if(s==='locked')body+='<button class="btn pri" id="cr-u1">UNLOCK</button>';
+ if(s==='unlocked'){body+='<div style="margin:6px 0"><button class="btn" id="cr-l1">LOCK NOW</button> <label>Lock after <select id="cr-i"><option value="5">5</option><option value="15">15</option><option value="30">30</option><option value="60">60</option><option value="0">never (until closed)</option></select> idle minutes</label></div><div style="margin:6px 0"><small>Change master password</small>'+pwIn('cr-o','Current password')+pwIn('cr-n','New password (10+ characters)')+'<button class="btn" id="cr-cp">CHANGE</button> <span id="cr-m"></span></div><div style="margin-top:6px">'+exposure()+'</div>'}
+ if(s!=='none'&&s!=='legacy'&&s!=='unlocked'){}
+ const m=modal('credm','CREDENTIAL PROTECTION',body);
+ const q=x=>m.querySelector(x);if(q('#cr-p1'))q('#cr-p1').onclick=()=>C.openProtect();if(q('#cr-u1'))q('#cr-u1').onclick=()=>C.openUnlock();if(q('#cr-l1'))q('#cr-l1').onclick=()=>{C.lock();m.classList.remove('on')};
+ if(q('#cr-i')){q('#cr-i').value=String(st.idle);q('#cr-i').onchange=e=>{st.idle=+e.target.value;localStorage.setItem('mmv3_credcfg',JSON.stringify({idle:st.idle}))}}
+ if(q('#cr-cp'))q('#cr-cp').onclick=async()=>{const e=q('#cr-m');try{await C.changePw(q('#cr-o').value,q('#cr-n').value);e.className='up';e.textContent='Changed.'}catch(x){e.className='dn';e.textContent=x.message}}};
+/* ---------- banner + entry points ---------- */
+const bar=document.createElement('div');bar.id='credbar';bar.style.cssText='display:none;padding:6px 12px;background:var(--bg2);border-bottom:1px solid var(--line);font:12px -apple-system,"Segoe UI",Arial,sans-serif;align-items:center;gap:10px;flex-wrap:wrap';const hdr=document.getElementById('bar');if(hdr)hdr.after(bar);
+let dismissed=false;
+function banner(){const s=C.status();let h='';if(s==='locked')h='<b>Locked.</b> Live prices and sync are off until you unlock. <button class="btn pri" id="cb-a">UNLOCK</button>';else if(s==='legacy'&&!dismissed)h='<b class="dn">Your keys and sync login are stored without protection.</b> <button class="btn pri" id="cb-a">PROTECT NOW</button> <button class="btn" id="cb-d">LATER</button>';
+ bar.style.display=h?'flex':'none';bar.innerHTML=h;const a=bar.querySelector('#cb-a');if(a)a.onclick=()=>s==='locked'?C.openUnlock():C.openProtect();const d=bar.querySelector('#cb-d');if(d)d.onclick=()=>{dismissed=true;banner()}}
+window._credBanner=banner;banner();setInterval(()=>{if(!document.hidden)banner()},5000);
+if(st.has&&st.locked)setTimeout(()=>C.openUnlock(),600);
+const _os=window.openSetup||openSetup;window.openSetup=function(){if(C.status()==='locked'){C.openUnlock();return}return _os.apply(this,arguments)};
+try{openSetup=window.openSetup}catch(e){}
+/* setup window: protection row + backup buttons */
+(function(){const k=document.getElementById('kfh');if(k&&k.parentNode&&!document.getElementById('credrow')){const r=document.createElement('div');r.id='credrow';r.style.cssText='margin:6px 0';r.innerHTML='<button class="btn" id="credopen">CREDENTIAL PROTECTION</button> <small class="mut" id="credst"></small>';k.parentNode.insertBefore(r,k.parentNode.firstChild);document.getElementById('credopen').onclick=()=>C.openManage();
+  const upd=()=>{const e=document.getElementById('credst');if(e)e.textContent={none:'',legacy:'keys are not protected',locked:'locked',unlocked:'unlocked'}[C.status()]};setInterval(upd,2000)}
+ const be=document.getElementById('bexp');if(be&&!document.getElementById('bexpenc')){be.insertAdjacentHTML('afterend','<button class="btn" id="bexpenc">EXPORT ENCRYPTED FULL BACKUP</button><div id="bknote" style="margin-top:4px"><small class="mut"><b>Standard backup</b> (EXPORT BACKUP): your records, <b>not encrypted</b>, and it does <b>not</b> include API keys, the phone-alert topic or the sync login. <b>Encrypted full backup</b>: records and keys, locked with a password you choose.</small></div>');
+  document.getElementById('bexpenc').onclick=()=>{const m=modal('credm','ENCRYPTED FULL BACKUP','<p style="margin:8px 0"><small class="mut">Locks your records and keys with a password using AES-256-GCM. You need this password to restore it. It is not stored anywhere.</small></p>'+pwIn('cr-p','Backup password (10+ characters)')+pwIn('cr-p2','Repeat it')+'<div id="cr-e" class="dn" style="min-height:18px"></div><button class="btn pri" id="cr-go">DOWNLOAD</button>');
+   m.querySelector('#cr-go').onclick=async()=>{const e=m.querySelector('#cr-e'),p=m.querySelector('#cr-p').value;if(p!==m.querySelector('#cr-p2').value)return e.textContent='The passwords do not match.';try{const f=await C.encBackup(p);const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(f)],{type:'application/json'}));a.download='mmv-terminal-ENCRYPTED-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);m.classList.remove('on');toast('Encrypted backup downloaded')}catch(x){e.textContent=x.message}}}}})();
+/* restore: encrypted files ask for their password */
+(function(){const f=document.getElementById('bfile');if(!f)return;const old=f.onchange;f.onchange=function(e){const file=e.target.files&&e.target.files[0];if(!file)return old&&old.call(this,e);const rd=new FileReader();const self=this;rd.onload=()=>{let d=null;try{d=JSON.parse(rd.result)}catch(x){}
+ if(!d||d.format!=='encrypted'){return old&&old.call(self,e)}
+ if(st.has&&st.locked){C.openUnlock();toast('Unlock first, then choose the backup file again.');return}
+ const m=modal('credm','RESTORE ENCRYPTED BACKUP','<p style="margin:8px 0"><small class="mut">Enter the password you chose when you made this backup.</small></p>'+pwIn('cr-p','Backup password')+'<div id="cr-e" class="dn" style="min-height:18px"></div><button class="btn pri" id="cr-go">RESTORE</button>');
+ m.querySelector('#cr-go').onclick=async()=>{const e2=m.querySelector('#cr-e');try{const o=await C.decBackup(d,m.querySelector('#cr-p').value);if(!o||!o.state||typeof o.state.lists!=='object')throw new Error('That backup does not contain valid data.');
+   try{localStorage.setItem('mmv3_prerestore',stripText(localStorage.getItem('mmv3')||''))}catch(x){}
+   const sec=o.secrets||{};if(st.has){applySecrets(sec);st.last='';await C.persist()}else{const s2=o.state;['fh','td','aiskey'].forEach(k=>{if(sec[k])s2[k]=sec[k]});if(sec.topic){s2.radar=s2.radar||{};s2.radar.topic=sec.topic}}
+   localStorage.setItem('mmv3',JSON.stringify(o.state));window._noFlush=1;toast('Restored. Your previous data was kept as a safety copy. Reloading...');setTimeout(()=>location.reload(),700)}catch(x){e2.textContent=x.message}}};rd.readAsText(file)}})();
+/* more menu entry + palette */
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.pop13 button[data-p="cred"]');if(b)setTimeout(()=>C.openManage(),0)},true);
+const mv=document.getElementById('vmore');if(mv){const oc=mv.onclick;mv.onclick=function(ev){oc.call(this,ev);const p=document.querySelector('.pop13');if(p&&!p.querySelector('[data-p="cred"]')){const bt=document.createElement('button');bt.dataset.p='cred';bt.innerHTML='Credential protection';p.appendChild(bt)}}}
+})();
+
+
+/* ===================== v13.4: storage-full safety net ===================== */
+(function(){
+if(window._v134q)return;window._v134q=1;
+const KB=()=>{try{return Math.round((localStorage.getItem('mmv3')||'').length/1024)}catch(e){return 0}};
+let warned=0;
+setInterval(()=>{if(document.hidden||warned)return;const k=KB();if(k>3600){warned=1;try{toast('Storage is about '+Math.round(k/50)+'% full ('+Math.round(k/1024*10)/10+' MB of roughly 5 MB). Export a backup and consider archiving old years.')}catch(e){}}},15000);
+function dl(j){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([j],{type:'application/json'}));a.download='mmv-terminal-FULL-COPY-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),3000)}
+setTimeout(async()=>{try{const q=await idbGet('qfail');if(!q)return;const m=await idbGet('mirror');if(!m||!m.j)return;
+ const b=document.createElement('div');b.style.cssText='position:fixed;left:50%;top:44px;transform:translateX(-50%);z-index:95;background:var(--bg);border:2px solid var(--dn,#f55);padding:10px 14px;max-width:600px;line-height:1.5';
+ b.innerHTML='<b>Some recent changes did not fit in browser storage.</b> A complete copy from '+new Date(m.t).toLocaleString()+' is safe in this browser\'s backup storage. Download it now so nothing is lost, then restore it with RESTORE FROM BACKUP FILE in Setup. <div style="margin-top:6px"><button class="btn pri" id="qf-d">DOWNLOAD FULL COPY</button> <button class="btn" id="qf-x">DISMISS</button></div>';
+ document.body.appendChild(b);b.querySelector('#qf-x').onclick=()=>b.remove();
+ b.querySelector('#qf-d').onclick=()=>{try{const st=JSON.parse(m.j);dl(JSON.stringify({app:'MMV Terminal',version:3,format:'standard',encrypted:false,secrets:'excluded',saved:new Date(m.t).toISOString(),state:st},null,2))}catch(e){dl(m.j)}}}catch(e){}},3500);
+})();
 </script>
 </body>
 </html>
